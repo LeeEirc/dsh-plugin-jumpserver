@@ -1,0 +1,13 @@
+node_modules/
+coverage/
+test-results/
+playwright-report/
+*.tgz
+.env
+.DS_Store
+
+# Local integration verification; excluded from the public repository.
+/scripts/live-helpers.mjs
+/scripts/verify-live.mjs
+/scripts/verify-dsh.mjs
+/scripts/verify-dsh-host.mjs

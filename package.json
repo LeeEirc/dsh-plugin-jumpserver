@@ -1,0 +1,39 @@
+{
+  "name": "dsh-plugin-jumpserver",
+  "version": "0.1.0",
+  "description": "JumpServer OAuth and MCP adapter for DeepSeek Harness desktop and web",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": ["lib", "cordis.patch.yml", "README.md", "LICENSE", "THIRD_PARTY_NOTICES"],
+  "license": "MIT",
+  "engines": { "node": "^22.19.0 || >=24.0.0", "dsh": ">=0.2.1-rc.2 <0.3.0" },
+  "scripts": {
+    "build": "node scripts/build-client.mjs",
+    "prepack": "npm run build",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": { "@modelcontextprotocol/sdk": "^1.32.2", "zod": "^4.4.3" },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.0.5",
+    "@deepseek-ai/dsh-typert-protocol": ">=0.2.1-rc.2 <0.3.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.0"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-locale"
+      ]
+    },
+    "bundle": { "patch": "./cordis.patch.yml" }
+  }
+}

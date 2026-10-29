@@ -1,0 +1,139 @@
+import React from 'react';
+import { remoteContract } from '../lib/remote-contract.js';
+
+const h = React.createElement;
+export const inject = ['remote'];
+const zh = {
+  title: 'JumpServer', intro: '连接 JumpServer，在浏览器中授权后使用获准访问的资产工具。',
+  name: '实例标识', url: 'JumpServer / MCP 地址', timeout: '工具调用超时（毫秒）', add: '添加实例', save: '保存修改', cancel: '取消',
+  authorize: '浏览器授权', open: '打开授权页面', connect: '重新连接', edit: '编辑', disable: '停用', enable: '启用', logout: '撤销授权', remove: '删除',
+  connected: '已连接', 'needs-auth': '待授权', authorizing: '等待浏览器授权', connecting: '连接中', disabled: '已停用', disconnected: '未连接', error: '连接失败',
+  tools: '工具', logs: '诊断日志', empty: '尚未添加 JumpServer 实例。', none: '暂无日志', expires: 'Token 到期', refreshed: '最近刷新',
+  deleteQuestion: '删除此实例及本地 Token？服务端授权可先通过“撤销授权”撤销。', logoutQuestion: '撤销此实例的 OAuth 授权？',
+  authHint: '在新页面登录、选择组织并确认授权。授权完成后本页会自动更新。',
+  nameHint: '小写字母开头，仅含小写字母、数字、下划线；用于工具名称。',
+};
+const en = {
+  title: 'JumpServer', intro: 'Connect JumpServer and authorize in your browser to use permitted asset tools.',
+  name: 'Instance identifier', url: 'JumpServer / MCP URL', timeout: 'Tool call timeout (ms)', add: 'Add instance', save: 'Save changes', cancel: 'Cancel',
+  authorize: 'Authorize in browser', open: 'Open authorization page', connect: 'Reconnect', edit: 'Edit', disable: 'Disable', enable: 'Enable', logout: 'Revoke authorization', remove: 'Delete',
+  connected: 'Connected', 'needs-auth': 'Authorization required', authorizing: 'Waiting for browser', connecting: 'Connecting', disabled: 'Disabled', disconnected: 'Disconnected', error: 'Connection failed',
+  tools: 'Tools', logs: 'Diagnostics', empty: 'No JumpServer instances yet.', none: 'No diagnostics yet', expires: 'Token expires', refreshed: 'Last refreshed',
+  deleteQuestion: 'Delete this instance and its local tokens? Revoke authorization first to revoke the server grant.', logoutQuestion: 'Revoke OAuth authorization for this instance?',
+  authHint: 'Sign in, select an organization and consent in the new page. This page updates automatically.',
+  nameHint: 'Start with a lowercase letter; use lowercase letters, digits and underscores. Used in tool names.',
+};
+
+const css = `.jsm{max-width:850px;color:var(--dsw-alias-label-primary);display:flex;flex-direction:column;gap:16px}.jsm p{margin:0;color:var(--dsw-alias-label-secondary);line-height:1.6}.jsm h3{margin:0;font-size:16px}.jsm-card,.jsm-form{border:1px solid var(--dsw-alias-border-l2);border-radius:10px;padding:16px;background:var(--dsw-alias-bg-layer-3);display:flex;flex-direction:column;gap:12px}.jsm-head,.jsm-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.jsm-head strong{flex:1}.jsm-status{font-size:12px;border-radius:6px;padding:3px 8px;background:var(--dsw-alias-bg-layer-1)}.jsm-status[data-state=connected]{color:var(--dsw-alias-state-success-primary)}.jsm-error{color:var(--dsw-alias-state-error-primary);font-size:13px;overflow-wrap:anywhere}.jsm-url{font-size:12px;overflow-wrap:anywhere;color:var(--dsw-alias-label-tertiary)}.jsm label{font-size:13px;display:flex;flex-direction:column;gap:6px}.jsm input{font:inherit;padding:8px 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:7px;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-layer-1)}.jsm button{font:inherit;font-size:12px;padding:6px 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:7px;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-layer-1);cursor:pointer}.jsm button:disabled{opacity:.5;cursor:default}.jsm .jsm-primary{background:var(--dsw-alias-state-business-primary);color:white;border-color:transparent}.jsm small{font-size:11px;color:var(--dsw-alias-label-tertiary)}.jsm details{font-size:12px}.jsm summary{cursor:pointer}.jsm pre{max-height:220px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px}.jsm li{margin:8px 0}.jsm a{color:var(--dsw-alias-state-business-primary)}`;
+
+function Settings({ request, t }) {
+  const [instances, setInstances] = React.useState([]);
+  const [error, setError] = React.useState('');
+  const [busy, setBusy] = React.useState(false);
+  const [editing, setEditing] = React.useState(null);
+  const [values, setValues] = React.useState({ name: '', url: '', timeoutMs: '60000' });
+  const [authorization, setAuthorization] = React.useState(null);
+  const [logs, setLogs] = React.useState({});
+  const refresh = React.useCallback(async () => {
+    const rows = await request({ action: 'list' });
+    setInstances(rows);
+    setAuthorization(previous => previous && rows.find(row => row.id === previous.id)?.status === 'authorizing' ? previous : null);
+  }, [request]);
+  React.useEffect(() => {
+    let active = true, running = false;
+    const poll = async () => {
+      if (running || !active) return;
+      running = true;
+      try { const rows = await request({ action: 'list' }); if (active) setInstances(rows); }
+      catch (e) { if (active) setError(e.message); }
+      finally { running = false; }
+    };
+    poll();
+    const timer = setInterval(poll, 2500);
+    return () => { active = false; clearInterval(timer); };
+  }, [request]);
+  const run = async work => {
+    setBusy(true); setError('');
+    try { await work(); await refresh(); }
+    catch (e) { setError(e.message); }
+    finally { setBusy(false); }
+  };
+  const authorize = id => {
+    const popup = window.open('about:blank', '_blank');
+    if (popup) popup.opener = null;
+    run(async () => {
+      try {
+        const options = {};
+        // A forwarded local Web origin can use the existing HTTP route. Desktop
+        // file:// and ordinary local Web also work through a temporary listener.
+        if (location.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(location.hostname)) {
+          const callback = new URL(location.origin);
+          if (callback.hostname === 'localhost') callback.hostname = '127.0.0.1';
+          options.callbackOrigin = callback.origin;
+        }
+        const result = await request({ action: 'authorize', id, options });
+        setAuthorization({ ...result, id });
+        if (popup) popup.location.href = result.authorizeUrl;
+      } catch (e) { popup?.close(); throw e; }
+    });
+  };
+  const field = (key, type = 'text') => h('label', { key }, t(key === 'timeoutMs' ? 'timeout' : key),
+    h('input', { type, required: true, value: values[key], 'aria-label': t(key === 'timeoutMs' ? 'timeout' : key),
+      placeholder: key === 'url' ? 'https://jumpserver.example.com/koko/mcp' : key === 'name' ? 'main' : undefined,
+      min: type === 'number' ? 1000 : undefined, max: type === 'number' ? 600000 : undefined,
+      onChange: event => setValues(old => ({ ...old, [key]: event.target.value })) }));
+  const action = (label, handler, extra = {}) => h('button', { type: 'button', disabled: busy, onClick: handler, ...extra }, t(label));
+  return h('section', { className: 'jsm', 'data-jumpserver-settings': true },
+    h('h3', null, t('title')), h('p', null, t('intro')),
+    error && h('div', { className: 'jsm-error', role: 'alert' }, error),
+    h('form', { className: 'jsm-form', onSubmit: event => { event.preventDefault(); run(async () => {
+      await request({ action: editing ? 'update' : 'add', id: editing, values });
+      setEditing(null); setValues({ name: '', url: '', timeoutMs: '60000' });
+    }); } }, field('name'), h('small', null, t('nameHint')), field('url'), field('timeoutMs', 'number'),
+    h('div', { className: 'jsm-actions' }, h('button', { className: 'jsm-primary', type: 'submit', disabled: busy }, t(editing ? 'save' : 'add')),
+      editing && action('cancel', () => { setEditing(null); setValues({ name: '', url: '', timeoutMs: '60000' }); }))),
+    !instances.length && h('p', null, t('empty')),
+    ...instances.map(row => h('article', { className: 'jsm-card', key: row.id, 'data-instance': row.name },
+      h('div', { className: 'jsm-head' }, h('strong', null, row.name), h('span', { className: 'jsm-status', 'data-state': row.status }, `${t(row.status)}${row.status === 'connected' ? ` · ${row.toolCount} ${t('tools')}` : ''}`)),
+      h('div', { className: 'jsm-url' }, row.url),
+      row.error && h('div', { className: 'jsm-error' }, row.error),
+      h('div', { className: 'jsm-actions' },
+        row.enabled && action('authorize', () => authorize(row.id), { className: 'jsm-primary' }),
+        row.enabled && action('connect', () => run(() => request({ action: 'connect', id: row.id }))),
+        action('edit', () => { setEditing(row.id); setValues({ name: row.name, url: row.url, timeoutMs: String(row.timeoutMs) }); }),
+        action(row.enabled ? 'disable' : 'enable', () => run(() => request({ action: 'update', id: row.id, values: { enabled: !row.enabled } }))),
+        action('logout', () => { if (window.confirm(t('logoutQuestion'))) run(() => request({ action: 'logout', id: row.id })); }),
+        action('remove', () => { if (window.confirm(t('deleteQuestion'))) run(() => request({ action: 'remove', id: row.id })); })),
+      authorization?.id === row.id && row.status === 'authorizing' && h('p', null, t('authHint'), ' ', h('a', { href: authorization.authorizeUrl, target: '_blank', rel: 'noopener noreferrer' }, t('open'))),
+      row.expiresAt && h('small', null, `${t('expires')}: ${new Date(row.expiresAt).toLocaleString()}${row.lastRefreshAt ? ` · ${t('refreshed')}: ${new Date(row.lastRefreshAt).toLocaleString()}` : ''}`),
+      h('details', null, h('summary', null, `${t('tools')} (${row.toolCount})`), h('ul', null, ...row.tools.map(tool => h('li', { key: tool.name }, h('code', null, tool.name), h('p', null, tool.description))))),
+      h('details', { onToggle: event => { if (event.currentTarget.open) request({ action: 'logs', id: row.id }).then(value => setLogs(old => ({ ...old, [row.id]: value }))).catch(e => setError(e.message)); } },
+        h('summary', null, t('logs')), h('pre', null, (logs[row.id] || []).map(log => `${new Date(log.at).toLocaleTimeString()} [${log.phase}] ${log.message}`).join('\n') || t('none'))),
+    )),
+  );
+}
+
+function registerSettings(ctx) {
+  ctx.effect(() => ctx.locale.register('jumpserver', { zh, en }));
+  const request = async input => {
+    const remote = await ctx.remote.jumpserver.request(input);
+    if (!remote.ok) throw new Error(remote.error.message || remote.error.code);
+    const result = remote.value;
+    if (!result.ok) throw new Error(result.error.message);
+    return result.value;
+  };
+  const t = ctx.locale.bind('jumpserver');
+  if (!document.querySelector('style[data-jumpserver]')) {
+    const style = document.createElement('style'); style.dataset.jumpserver = 'true'; style.textContent = css; document.head.appendChild(style);
+    ctx.effect(() => () => style.remove());
+  }
+  ctx.slots.inject('settings.section', () => ctx.slots.register({ name: 'settings.section', id: 'jumpserver', order: 51, label: () => t('title'), locale: 'jumpserver' }, () => h(Settings, { request, t })));
+}
+
+export async function apply(ctx) {
+  const unmount = await ctx.remote.$mount(remoteContract);
+  const ui = ctx.inject(['remote.jumpserver', 'slots', 'locale'], registerSettings);
+  try { await ui; }
+  catch (error) { await ui.dispose(); await unmount(); throw error; }
+  return async () => { await ui.dispose(); await unmount(); };
+}
