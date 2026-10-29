@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-jumpserver",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "JumpServer OAuth and MCP adapter for DeepSeek Harness desktop and web",
   "type": "module",
   "main": "lib/index.js",

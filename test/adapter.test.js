@@ -60,6 +60,12 @@ test('forged OAuth state is rejected without consuming the legitimate flow', asy
   assert.equal((await manager.store.get(row.id)).tokens, undefined);
 });
 
+test('equivalent JSON tool content is rendered once despite escaping and key order', () => {
+  const structuredContent = { command: 'echo <ready> & done', action_id: 'a' };
+  const content = [{ type: 'text', text: '{"action_id":"a","command":"echo \\u003cready\\u003e \\u0026 done"}' }];
+  assert.equal(renderResult({}, { content, structuredContent })[0].text, JSON.stringify(structuredContent));
+});
+
 test('concurrent requests serialize refresh rotation across manager instances', async t => {
   const { remote, store, manager, row, authorize } = await setup(t);
   await authorize();

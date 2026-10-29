@@ -16,10 +16,10 @@ npm run build
 npm pack
 ```
 
-在 DSH 桌面版的插件安装入口选择本地包 `dsh-plugin-jumpserver-0.1.0.tgz`，或将其完整路径作为安装源。Web 版可使用：
+在 DSH 桌面版的插件安装入口选择本地包 `dsh-plugin-jumpserver-0.2.0.tgz`，或将其完整路径作为安装源。Web 版可使用：
 
 ```bash
-dsh plugin --profile web add /完整路径/dsh-plugin-jumpserver-0.1.0.tgz
+dsh plugin --profile web add /完整路径/dsh-plugin-jumpserver-0.2.0.tgz
 ```
 
 安装后重启对应 DSH profile，打开 **设置 → JumpServer**。包中的 `cordis.patch.yml` 自动启用插件。
@@ -33,6 +33,8 @@ dsh plugin --profile web add /完整路径/dsh-plugin-jumpserver-0.1.0.tgz
 5. 修改地址会清除该实例的本地 OAuth 凭据，需要重新授权。停用保留凭据并卸载工具；“撤销授权”调用服务端撤销端点并删除本地 Token；“删除”仅删除本地实例。
 
 实例标识以小写字母开头，仅包含小写字母、数字和下划线，最多 32 字符。可以配置同一站点的多个实例，分别授权不同组织。组织由 JumpServer 授权页决定，切换组织需要重新授权。
+
+使用模型网关时，DSH 配置中的模型标识须与网关实际可用的模型目录一致。模型路由的 404 应通过 DSH 模型设置修正，避免把它当作 JumpServer 权限错误重试。
 
 ## 桌面与 Web
 
@@ -63,7 +65,10 @@ dsh plugin --profile web add /完整路径/dsh-plugin-jumpserver-0.1.0.tgz
 - `unknown` 结果禁止自动重发，须先核对资产状态。
 - 审批、MFA、个人凭据和敏感输入通过返回的 JumpServer 页面完成。
 - SSH 命令之间不共享 Shell 状态，工作目录和环境变量使用 `cwd` / `env` 显式传入。
-- `upload_file` / `download_file` 可以发现和调用，但 PC 大文件字节传输还需独立实现文件流接口；本插件第一版不提供本地文件上传/下载 UI。小文本可使用 `read_file` / `write_file`。
+- 在 DSH 的“设置 → JumpServer → 文件上传与下载”中搜索资产、选择 SFTP 账号和虚拟远端路径，可上传本机文件或下载资产文件。插件建立专用 SFTP 会话并负责文件流；操作仍经过 Core 授权、审批及审计。每次最多 100 MiB，同时最多传输两个文件。
+- SFTP 的 `/` 是平台配置的虚拟根目录，可能与 SSH 的系统 `/` 不同。先确认该目录的可见路径；没有 SFTP 授权时须先调整授权，不能靠 SSH/base64 绕过文件策略。
+- `upload_file` / `download_file` 本身登记操作；仅轮询不会上传字节。浏览器文件流经 DSH 已认证的 Connection 路由转发，OAuth Token 始终留在宿主侧。上传按登记大小和 SHA256 校验；下载先核对审计结果、响应头、实际长度和 SHA256，再交付给浏览器。小文本仍可使用 `read_file` / `write_file`。
+- 人工审批或凭据输入通过面板中的 JumpServer 链接完成，再点击“继续查询”。未确认结果的上传不会自动重传；关闭记录会请求取消未完成操作并释放会话。刷新页面会丢失本机文件选择，须先查看原操作审计；不支持断点续传。
 
 ## 开发
 
@@ -88,7 +93,7 @@ git push origin master --follow-tags
 也可以在 GitHub **Actions → Build and Release → Run workflow** 手动发布：
 
 - `tag` 留空：使用所选分支的 `package.json` 版本创建 Release 和标签。
-- `tag` 填写已有标签（例如 `v0.1.0`）：检出该标签，重新测试、构建并更新对应 Release 的安装包和校验文件。
+- `tag` 填写已有标签（例如 `v0.2.0`）：检出该标签，重新测试、构建并更新对应 Release 的安装包和校验文件。
 - 已有运行可以使用 **Re-run all jobs** 重跑。只重跑发布 job 时复用尚未过期的构建产物。
 
 标签必须与 `package.json` 的版本一致。同一标签重跑会覆盖同名附件，并保留既有 Release 说明；不会移动已有标签。所选分支包含新代码时，应提升版本，或明确选择原标签重建。包含预发布版本号的标签（如 `v0.2.0-beta.1`）自动标记为 Pre-release。

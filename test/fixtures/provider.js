@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { createHash } from 'node:crypto';
 
-export async function provider() {
+export async function provider({ files = false } = {}) {
   const state = { registrations: 0, refreshes: 0, calls: 0, denyRefresh: false, access: 'access-0', refresh: 'refresh-0', grants: new Map(), dropCommand: false };
   let base;
   const tools = [
@@ -9,11 +9,33 @@ export async function provider() {
     { name: 'execute_command', description: 'Submit an operation', inputSchema: { type: 'object', properties: { command: { type: 'string' }, idempotency_key: { type: 'string' } }, required: ['command', 'idempotency_key'] } },
     { name: 'get_action', description: 'Read an action', inputSchema: { type: 'object', properties: { action_id: { type: 'string' } }, required: ['action_id'] } },
   ];
+  if (files) {
+    for (const name of ['connect_asset', 'disconnect_asset', 'upload_file', 'download_file', 'cancel_action']) tools.push({ name, inputSchema: { type: 'object', additionalProperties: true } });
+    state.fileActions = new Map(); state.fileRequests = 0;
+    state.fileBytes = Buffer.from('verified file\0\xff\n中文');
+  }
   const json = (res, code, value) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(value)); };
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, base);
-    let text = '';
-    for await (const chunk of req) text += chunk;
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const bytes = Buffer.concat(chunks);
+    const text = bytes.toString();
+    if (files && url.pathname.startsWith('/koko/mcp/files/')) {
+      state.fileRequests++;
+      state.fileHeaders = req.headers;
+      if (req.headers.authorization !== `Bearer ${state.access}` || state.denyFile) { res.writeHead(401); res.end(); return; }
+      const action = state.fileActions.get(req.headers['x-jumpserver-action-id']);
+      if (!action) { res.writeHead(404); res.end(); return; }
+      if (url.pathname.endsWith('/upload')) {
+        if (action.status !== 'queued' || bytes.length !== action.request.size || createHash('sha256').update(bytes).digest('hex') !== action.request.sha256) { res.writeHead(409); res.end(); return; }
+        state.fileBytes = bytes; action.status = 'succeeded'; action.result = { size: bytes.length, sha256: action.request.sha256 };
+        json(res, 200, action); return;
+      }
+      const payload = state.badDownload ? Buffer.alloc(state.fileBytes.length, 0) : state.fileBytes;
+      res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': String(payload.length), 'X-Content-SHA256': action.result.sha256 });
+      res.end(payload); return;
+    }
     if (url.pathname.endsWith('oauth-protected-resource') || url.pathname === '/.well-known/oauth-protected-resource/koko/mcp') {
       json(res, 200, { resource: `${base}/koko/mcp`, authorization_servers: [base], scopes_supported: ['agent:access'] }); return;
     }
@@ -71,7 +93,23 @@ export async function provider() {
       else if (rpc.method === 'tools/call') {
         state.calls++;
         if (state.dropCommand && rpc.params.name === 'execute_command') { req.socket.destroy(); return; }
-        const value = rpc.params.name === 'search_assets' ? { results: [] } : { action_id: 'action-1', status: 'awaiting_approval', approval_url: `${base}/approval`, audit_status: 'pending', next_offset: 3, evidence_pending: true };
+        let value = rpc.params.name === 'search_assets' ? { results: [] } : { action_id: 'action-1', status: 'awaiting_approval', approval_url: `${base}/approval`, audit_status: 'pending', next_offset: 3, evidence_pending: true };
+        if (files) {
+          const { name, arguments: args } = rpc.params;
+          if (name === 'search_assets') value = { results: [{ id: 'asset', name: 'asset', accounts: [{ id: 'account-id', name: 'root', username: 'root', protocols: ['ssh', 'sftp'] }] }] };
+          if (name === 'connect_asset') {
+            value = { session_id: 'file-session', action_id: `connect-${state.calls}`, status: 'ready' };
+            state.fileActions.set(value.action_id, { ...value, status: 'succeeded' });
+          }
+          if (name === 'upload_file' || name === 'download_file') {
+            value = { action_id: `${name}-${state.calls}`, session_id: 'file-session', status: name === 'upload_file' ? state.fileApproval ? 'awaiting_approval' : 'queued' : 'succeeded', request: args,
+              result: { size: state.fileBytes.length, sha256: createHash('sha256').update(state.fileBytes).digest('hex') } };
+            state.fileActions.set(value.action_id, value);
+          }
+          if (name === 'get_action') value = state.fileActions.get(args.action_id) || value;
+          if (name === 'disconnect_asset') value = { session_id: args.session_id, status: 'closed' };
+          if (name === 'cancel_action') value = { action_id: args.action_id, status: 'cancelled' };
+        }
         result = { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value };
       } else { json(res, 200, { jsonrpc: '2.0', id: rpc.id, error: { code: -32601, message: 'Method not found' } }); return; }
       json(res, 200, { jsonrpc: '2.0', id: rpc.id, result }); return;

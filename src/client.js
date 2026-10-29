@@ -1,5 +1,6 @@
 import React from 'react';
 import { remoteContract } from '../lib/remote-contract.js';
+import { FileTransfer } from './files.js';
 
 const h = React.createElement;
 export const inject = ['remote'];
@@ -12,6 +13,14 @@ const zh = {
   deleteQuestion: '删除此实例及本地 Token？服务端授权可先通过“撤销授权”撤销。', logoutQuestion: '撤销此实例的 OAuth 授权？',
   authHint: '在新页面登录、选择组织并确认授权。授权完成后本页会自动更新。',
   nameHint: '小写字母开头，仅含小写字母、数字、下划线；用于工具名称。',
+  fileTransfer: '文件上传与下载', fileRootHint: '路径从 SFTP 虚拟根目录 / 开始，与 SSH 中的系统路径可能不同。每次传输最多 100 MiB。',
+  fileSearch: '搜索资产', fileAsset: '资产', fileAccount: 'SFTP 账号', fileChoose: '请选择', filePath: '远端文件路径', fileSelect: '选择本机文件',
+  fileOverwrite: '允许覆盖已有文件', fileUpload: '上传文件', fileDownload: '下载文件', fileContinue: '继续查询', fileClose: '关闭记录',
+  fileNoSftp: '此资产没有可用的 SFTP 账号，请先检查资产和账号授权。', fileSizeLimit: '请选择不超过 100 MiB 的文件。',
+  fileSecureContext: '请通过 HTTPS 或本机地址访问 DSH，以校验上传文件的 SHA256。',
+  fileConnecting: '正在建立 SFTP 会话', fileRunning: '操作处理中，可稍后继续查询', fileApproval: '需要在 JumpServer 完成人工确认后继续',
+  fileReady: '已准备传输', fileSucceeded: '传输完成并已校验', fileFailed: '传输失败，请查看审计记录', fileCancelled: '已取消',
+  fileUnknown: '暂时无法确认结果，请查看原操作审计，不要重新提交', fileOpenApproval: '打开审批或凭据页面', fileAudit: '查看操作审计',
 };
 const en = {
   title: 'JumpServer', intro: 'Connect JumpServer and authorize in your browser to use permitted asset tools.',
@@ -22,9 +31,17 @@ const en = {
   deleteQuestion: 'Delete this instance and its local tokens? Revoke authorization first to revoke the server grant.', logoutQuestion: 'Revoke OAuth authorization for this instance?',
   authHint: 'Sign in, select an organization and consent in the new page. This page updates automatically.',
   nameHint: 'Start with a lowercase letter; use lowercase letters, digits and underscores. Used in tool names.',
+  fileTransfer: 'Upload and download files', fileRootHint: 'Paths start at the virtual SFTP root /, which may differ from SSH paths. Maximum 100 MiB per transfer.',
+  fileSearch: 'Search assets', fileAsset: 'Asset', fileAccount: 'SFTP account', fileChoose: 'Select', filePath: 'Remote file path', fileSelect: 'Choose a local file',
+  fileOverwrite: 'Allow overwriting an existing file', fileUpload: 'Upload file', fileDownload: 'Download file', fileContinue: 'Check progress', fileClose: 'Close record',
+  fileNoSftp: 'No authorized SFTP account is available on this asset. Check asset and account permissions.', fileSizeLimit: 'Choose a file no larger than 100 MiB.',
+  fileSecureContext: 'Open DSH over HTTPS or a loopback address to verify the upload SHA256.',
+  fileConnecting: 'Connecting SFTP session', fileRunning: 'Operation pending; check progress again shortly', fileApproval: 'Complete the human step in JumpServer, then continue',
+  fileReady: 'Ready to transfer', fileSucceeded: 'Transfer completed and verified', fileFailed: 'Transfer failed; inspect the audit record', fileCancelled: 'Cancelled',
+  fileUnknown: 'Result is uncertain. Inspect the original audit record before submitting another operation.', fileOpenApproval: 'Open approval or credentials page', fileAudit: 'View operation audit',
 };
 
-const css = `.jsm{max-width:850px;color:var(--dsw-alias-label-primary);display:flex;flex-direction:column;gap:16px}.jsm p{margin:0;color:var(--dsw-alias-label-secondary);line-height:1.6}.jsm h3{margin:0;font-size:16px}.jsm-card,.jsm-form{border:1px solid var(--dsw-alias-border-l2);border-radius:10px;padding:16px;background:var(--dsw-alias-bg-layer-3);display:flex;flex-direction:column;gap:12px}.jsm-head,.jsm-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.jsm-head strong{flex:1}.jsm-status{font-size:12px;border-radius:6px;padding:3px 8px;background:var(--dsw-alias-bg-layer-1)}.jsm-status[data-state=connected]{color:var(--dsw-alias-state-success-primary)}.jsm-error{color:var(--dsw-alias-state-error-primary);font-size:13px;overflow-wrap:anywhere}.jsm-url{font-size:12px;overflow-wrap:anywhere;color:var(--dsw-alias-label-tertiary)}.jsm label{font-size:13px;display:flex;flex-direction:column;gap:6px}.jsm input{font:inherit;padding:8px 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:7px;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-layer-1)}.jsm button{font:inherit;font-size:12px;padding:6px 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:7px;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-layer-1);cursor:pointer}.jsm button:disabled{opacity:.5;cursor:default}.jsm .jsm-primary{background:var(--dsw-alias-state-business-primary);color:white;border-color:transparent}.jsm small{font-size:11px;color:var(--dsw-alias-label-tertiary)}.jsm details{font-size:12px}.jsm summary{cursor:pointer}.jsm pre{max-height:220px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px}.jsm li{margin:8px 0}.jsm a{color:var(--dsw-alias-state-business-primary)}`;
+const css = `.jsm{max-width:850px;color:var(--dsw-alias-label-primary);display:flex;flex-direction:column;gap:16px}.jsm p{margin:0;color:var(--dsw-alias-label-secondary);line-height:1.6}.jsm h3{margin:0;font-size:16px}.jsm-card,.jsm-form{border:1px solid var(--dsw-alias-border-l2);border-radius:10px;padding:16px;background:var(--dsw-alias-bg-layer-3);display:flex;flex-direction:column;gap:12px}.jsm-head,.jsm-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.jsm-head strong{flex:1}.jsm-status{font-size:12px;border-radius:6px;padding:3px 8px;background:var(--dsw-alias-bg-layer-1)}.jsm-status[data-state=connected]{color:var(--dsw-alias-state-success-primary)}.jsm-error{color:var(--dsw-alias-state-error-primary);font-size:13px;overflow-wrap:anywhere}.jsm-url{font-size:12px;overflow-wrap:anywhere;color:var(--dsw-alias-label-tertiary)}.jsm label{font-size:13px;display:flex;flex-direction:column;gap:6px}.jsm-file-transfer{display:flex;flex-direction:column;gap:10px;margin-top:12px}.jsm select{font:inherit;padding:8px;border:1px solid var(--dsw-alias-border-l2);border-radius:7px;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-layer-1)}.jsm input{font:inherit;padding:8px 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:7px;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-layer-1)}.jsm button{font:inherit;font-size:12px;padding:6px 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:7px;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-layer-1);cursor:pointer}.jsm button:disabled{opacity:.5;cursor:default}.jsm .jsm-primary{background:var(--dsw-alias-state-business-primary);color:white;border-color:transparent}.jsm small{font-size:11px;color:var(--dsw-alias-label-tertiary)}.jsm details{font-size:12px}.jsm summary{cursor:pointer}.jsm pre{max-height:220px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px}.jsm li{margin:8px 0}.jsm a{color:var(--dsw-alias-state-business-primary)}`;
 
 function Settings({ request, t }) {
   const [instances, setInstances] = React.useState([]);
@@ -106,6 +123,7 @@ function Settings({ request, t }) {
         action('remove', () => { if (window.confirm(t('deleteQuestion'))) run(() => request({ action: 'remove', id: row.id })); })),
       authorization?.id === row.id && row.status === 'authorizing' && h('p', null, t('authHint'), ' ', h('a', { href: authorization.authorizeUrl, target: '_blank', rel: 'noopener noreferrer' }, t('open'))),
       row.expiresAt && h('small', null, `${t('expires')}: ${new Date(row.expiresAt).toLocaleString()}${row.lastRefreshAt ? ` · ${t('refreshed')}: ${new Date(row.lastRefreshAt).toLocaleString()}` : ''}`),
+      row.status === 'connected' && h(FileTransfer, { request, t, instanceId: row.id }),
       h('details', null, h('summary', null, `${t('tools')} (${row.toolCount})`), h('ul', null, ...row.tools.map(tool => h('li', { key: tool.name }, h('code', null, tool.name), h('p', null, tool.description))))),
       h('details', { onToggle: event => { if (event.currentTarget.open) request({ action: 'logs', id: row.id }).then(value => setLogs(old => ({ ...old, [row.id]: value }))).catch(e => setError(e.message)); } },
         h('summary', null, t('logs')), h('pre', null, (logs[row.id] || []).map(log => `${new Date(log.at).toLocaleTimeString()} [${log.phase}] ${log.message}`).join('\n') || t('none'))),
