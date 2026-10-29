@@ -73,3 +73,24 @@ npm run build
 ```
 
 修改设置页源码 `src/client.js` 后执行 `npm run build`，生成 DSH 加载的 `lib/client.js`。单元测试使用本机隔离的 OAuth/MCP 服务，不需要外部环境或真实凭据。
+
+## 自动构建与 Release
+
+GitHub Actions 的 **Build and Release** 工作流在推送 `master` 或提交 Pull Request 时执行单元测试、构建和打包，安装包与 `SHA256SUMS` 保留在该次运行的 Artifacts 中。
+
+发布新版本时，先修改 `package.json` 的版本，并同步更新 lock 文件、提交代码，再推送同名版本标签：
+
+```bash
+npm version patch
+git push origin master --follow-tags
+```
+
+也可以在 GitHub **Actions → Build and Release → Run workflow** 手动发布：
+
+- `tag` 留空：使用所选分支的 `package.json` 版本创建 Release 和标签。
+- `tag` 填写已有标签（例如 `v0.1.0`）：检出该标签，重新测试、构建并更新对应 Release 的安装包和校验文件。
+- 已有运行可以使用 **Re-run all jobs** 重跑。只重跑发布 job 时复用尚未过期的构建产物。
+
+标签必须与 `package.json` 的版本一致。同一标签重跑会覆盖同名附件，并保留既有 Release 说明；不会移动已有标签。所选分支包含新代码时，应提升版本，或明确选择原标签重建。包含预发布版本号的标签（如 `v0.2.0-beta.1`）自动标记为 Pre-release。
+
+工作流只使用 GitHub 自动提供的 `GITHUB_TOKEN`，无需配置额外发布密钥。安装包通过 GitHub Release 分发，不会上传 npm registry。
