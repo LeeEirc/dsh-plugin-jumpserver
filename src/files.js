@@ -15,7 +15,7 @@ async function fileFetch(kind, transferId, init) {
   return response;
 }
 
-export function FileTransfer({ request, t, instanceId }) {
+export function FileTransfer({ request, t, connectionId }) {
   const [query, setQuery] = React.useState('');
   const [assets, setAssets] = React.useState([]);
   const [assetId, setAssetId] = React.useState('');
@@ -48,7 +48,7 @@ export function FileTransfer({ request, t, instanceId }) {
   };
 
   const search = () => run(async signal => {
-    const result = await request({ action: 'file_assets', id: instanceId, query });
+    const result = await request({ action: 'file_assets', id: connectionId, query });
     if (signal.aborted) return;
     const rows = result.results || [];
     setAssets(rows); setAssetId(rows[0]?.id || '');
@@ -89,7 +89,7 @@ export function FileTransfer({ request, t, instanceId }) {
   };
 
   const start = kind => run(async signal => {
-    const input = { action: 'file_start', instanceId, assetId, account, kind, remotePath: path, overwrite };
+    const input = { action: 'file_start', connectionId, assetId, account, kind, remotePath: path, overwrite };
     if (kind === 'upload') {
       if (!file || file.size > 100 * 1024 * 1024) throw new Error(t('fileSizeLimit'));
       if (!globalThis.crypto?.subtle) throw new Error(t('fileSecureContext'));

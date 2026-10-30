@@ -13,11 +13,11 @@ async function setup(t) {
   const directory = await mkdtemp(join(tmpdir(), 'dsh-jumpserver-file-test-'));
   const manager = new JumpServerManager({ store: new StateStore(join(directory, 'state.json')) });
   t.after(async () => { await manager.dispose(); await remote.close(); await rm(directory, { recursive: true, force: true }); });
-  const row = await manager.add({ name: 'files', url: `${remote.base}/koko/mcp` });
+  const row = await manager.add({ url: `${remote.base}/koko/mcp` });
   const auth = await manager.authorize(row.id);
   const response = await fetch(auth.authorizeUrl, { redirect: 'manual' });
   await manager.oauth.complete(row.id, new URL(response.headers.get('location')));
-  const input = { instanceId: row.id, assetId: 'asset', account: 'account-id', remotePath: '/file.bin' };
+  const input = { connectionId: row.id, assetId: 'asset', account: 'account-id', remotePath: '/file.bin' };
   return { remote, manager, row, input };
 }
 

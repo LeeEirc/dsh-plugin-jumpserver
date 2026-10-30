@@ -15,7 +15,7 @@ async function setup(t) {
   const store = new StateStore(join(directory, 'state.json'));
   const manager = new JumpServerManager({ store, retryBaseMs: 10000 });
   t.after(async () => { await manager.dispose(); await remote.close(); await rm(directory, { recursive: true, force: true }); });
-  const row = await manager.add({ name: 'test', url: `${remote.base}/koko/mcp` });
+  const row = await manager.add({ url: `${remote.base}/koko/mcp` });
   async function authorize() {
     const auth = await manager.authorize(row.id);
     const response = await fetch(auth.authorizeUrl, { redirect: 'manual' });
@@ -30,10 +30,11 @@ test('public PKCE authorization discovers tools and preserves action evidence', 
   const { remote, store, manager, row, authorize } = await setup(t);
   await authorize();
   assert.equal(remote.state.registration.token_endpoint_auth_method, 'none');
+  assert.equal(remote.state.registration.client_name, 'DeepSeek Harness');
   assert.equal(remote.state.authorization.scope, 'agent:access');
   assert.equal(remote.state.authorization.resource, `${remote.base}/koko/mcp`);
   assert.equal(remote.state.authorization.code_challenge_method, 'S256');
-  const view = (await manager.list())[0];
+  const view = (await manager.status());
   assert.equal(view.status, 'connected');
   assert.equal(view.toolCount, 3);
   assert.ok(!JSON.stringify(view).includes('access-0'));
@@ -45,6 +46,7 @@ test('public PKCE authorization discovers tools and preserves action evidence', 
   assert.equal(value.structuredContent.evidence_pending, true);
   assert.equal(value.structuredContent.next_offset, 3);
   assert.equal(definition.isConcurrencySafe(), false);
+  assert.equal(definition.name, 'mcp__jumpserver__execute_command');
   assert.equal((await stat(store.path)).mode & 0o777, 0o600);
   assert.match(renderResult({}, { content: [], structuredContent: { action_id: 'a' } })[0].text, /action_id/);
 });
@@ -69,7 +71,7 @@ test('equivalent JSON tool content is rendered once despite escaping and key ord
 test('concurrent requests serialize refresh rotation across manager instances', async t => {
   const { remote, store, manager, row, authorize } = await setup(t);
   await authorize();
-  await store.transaction(state => { state.instances[0].tokens.refreshAt = 0; });
+  await store.transaction(state => { state.connection.tokens.refreshAt = 0; });
   const other = new JumpServerManager({ store: new StateStore(store.path) });
   t.after(() => other.dispose());
   const tokens = await Promise.all(Array.from({ length: 12 }, (_, i) => (i % 2 ? manager : other).oauth.token(row.id)));
@@ -83,11 +85,11 @@ test('invalid_grant stops spent-token retries and requires reauthorization', asy
   const { remote, store, manager, row, authorize } = await setup(t);
   await authorize();
   remote.state.denyRefresh = true;
-  await store.transaction(state => { state.instances[0].tokens.refreshAt = 0; });
+  await store.transaction(state => { state.connection.tokens.refreshAt = 0; });
   await assert.rejects(manager.oauth.token(row.id), { code: 'invalid_grant' });
   await assert.rejects(manager.oauth.token(row.id), { code: 'needs_auth' });
   assert.equal(remote.state.refreshes, 1);
-  assert.equal((await manager.list())[0].status, 'needs-auth');
+  assert.equal((await manager.status()).status, 'needs-auth');
 });
 
 test('401 refreshes once; an uncertain command response is never replayed', async t => {
@@ -108,15 +110,15 @@ test('disable and restart preserve credentials; endpoint edits invalidate them',
   await authorize();
   const clientId = (await store.get(row.id)).client.id;
   await manager.update(row.id, { enabled: false });
-  assert.equal((await manager.list())[0].status, 'disabled');
+  assert.equal((await manager.status()).status, 'disabled');
   assert.ok((await store.get(row.id)).tokens);
   await manager.update(row.id, { enabled: true });
-  assert.equal((await manager.list())[0].status, 'connected');
+  assert.equal((await manager.status()).status, 'connected');
   assert.equal((await store.get(row.id)).client.id, clientId);
   const restart = new JumpServerManager({ store });
   t.after(() => restart.dispose());
   await manager.dispose(); await restart.start();
-  assert.equal((await restart.list())[0].status, 'connected');
+  assert.equal((await restart.status()).status, 'connected');
   await restart.update(row.id, { url: 'http://127.0.0.1:9/koko/mcp' });
   assert.equal((await store.get(row.id)).tokens, undefined);
   assert.equal((await store.get(row.id)).client, undefined);
@@ -130,7 +132,7 @@ test('revocation clears local tokens and client registration is reused', async t
   await manager.logout(row.id);
   assert.equal(remote.state.revoked, true);
   assert.equal((await store.get(row.id)).tokens, undefined);
-  assert.equal((await manager.list())[0].status, 'needs-auth');
+  assert.equal((await manager.status()).status, 'needs-auth');
 });
 
 test('a handshake completing after disable cannot restore tools', async t => {
@@ -145,7 +147,7 @@ test('a handshake completing after disable cannot restore tools', async t => {
   await manager.update(row.id, { enabled: false });
   release();
   await outcome;
-  const view = (await manager.list())[0];
+  const view = (await manager.status());
   assert.equal(view.status, 'disabled');
   assert.equal(view.toolCount, 0);
   assert.equal(manager.retries.size, 0);
@@ -176,8 +178,8 @@ test('state writes merge independently and corrupted state is not overwritten', 
   const directory = await mkdtemp(join(tmpdir(), 'dsh-jumpserver-store-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const store = new StateStore(join(directory, 'state.json'));
-  await Promise.all(Array.from({ length: 6 }, (_, i) => new StateStore(store.path).transaction(state => { state.instances.push({ id: i }); })));
-  assert.equal((await store.read()).instances.length, 6);
+  await Promise.all(Array.from({ length: 6 }, (_, i) => new StateStore(store.path).transaction(state => { state[`writer${i}`] = i; })));
+  assert.equal(Object.keys(await store.read()).filter(key => key.startsWith('writer')).length, 6);
   await writeFile(store.path, '{broken');
   await assert.rejects(store.transaction(() => {}), { code: 'state_read_failed' });
 });

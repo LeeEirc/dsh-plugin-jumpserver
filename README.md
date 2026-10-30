@@ -1,6 +1,6 @@
-# DSH JumpServer 插件
+# JumpServer for DeepSeek Harness
 
-为 DeepSeek Harness 桌面版及本机 `dsh web` 提供 JumpServer 实例管理、浏览器 OAuth 授权、Token 自动刷新、MCP 工具发现及调用。
+为 DeepSeek Harness 桌面版及本机 `dsh web` 提供 JumpServer 连接配置、浏览器 OAuth 授权、Token 自动刷新、MCP 工具发现及调用。
 
 适配 JumpServer / KoKo 的 `pr@dev@agent-mcp` 服务端契约。参考 [dsh-mcp-manager](https://github.com/hyqhyq3/dsh-mcp-manager) 的插件结构和 OAuth 集成方式，MCP 传输使用官方 TypeScript SDK。
 
@@ -26,13 +26,15 @@ dsh plugin --profile web add /完整路径/dsh-plugin-jumpserver-0.2.0.tgz
 
 ## 使用
 
-1. 添加实例：标识如 `main`、地址如 `https://jumpserver.example.com/koko/mcp`。只填写站点 origin 时自动补上 `/koko/mcp`；完整 MCP 地址末尾不能带 `/`。
-2. 点击“浏览器授权”，在 JumpServer 登录、选择组织并确认授权。部分部署还会要求确认跳转到本机回调。
+1. 配置 JumpServer：地址如 `https://jumpserver.example.com/koko/mcp`，填写后点击“保存配置”。只填写站点 origin 时自动补上 `/koko/mcp`；完整 MCP 地址末尾不能带 `/`。
+2. 点击“浏览器授权”，在 JumpServer 登录并确认授权。部分部署还会要求确认跳转到本机回调。
 3. 授权完成后自动连接并发现工具，设置页显示状态、工具列表、Token 有效期和诊断日志。浏览器未自动打开时点击“打开授权页面”。
-4. 在 DSH 会话中使用工具，名称为 `mcp__jumpserver_<实例标识>__<原始工具名>`，例如 `mcp__jumpserver_main__search_assets`。
-5. 修改地址会清除该实例的本地 OAuth 凭据，需要重新授权。停用保留凭据并卸载工具；“撤销授权”调用服务端撤销端点并删除本地 Token；“删除”仅删除本地实例。
+4. 在 DSH 会话中使用工具，名称为 `mcp__jumpserver__<原始工具名>`，例如 `mcp__jumpserver__search_assets`。
+5. 修改地址会清除本地 OAuth 凭据，需要重新授权。停用保留凭据并卸载工具；“撤销授权”调用服务端撤销端点并删除本地 Token，保留客户端注册信息；“清除配置”删除本地连接及其凭据。
 
-实例标识以小写字母开头，仅包含小写字母、数字和下划线，最多 32 字符。可以配置同一站点的多个实例，分别授权不同组织。组织由 JumpServer 授权页决定，切换组织需要重新授权。
+插件列表及设置页固定显示 **JumpServer**，包名为 `dsh-plugin-jumpserver`，内部插件 ID 为 `jumpserver`。JumpServer OAuth 授权页中的客户端名称固定为 **DeepSeek Harness**，同一连接重复授权会复用已保存的 `client_id`。
+
+每份状态配置只保存一个 JumpServer 连接，界面不提供自定义实例名和多实例列表；宿主侧拒绝创建第二条配置，并在同一 DSH 运行上下文中限制插件重复加载。切换站点须修改地址并重新授权，授权范围以 JumpServer 权限为准。不同电脑或用户保持各自独立的授权。
 
 使用模型网关时，DSH 配置中的模型标识须与网关实际可用的模型目录一致。模型路由的 404 应通过 DSH 模型设置修正，避免把它当作 JumpServer 权限错误重试。
 
@@ -47,13 +49,13 @@ dsh plugin --profile web add /完整路径/dsh-plugin-jumpserver-0.2.0.tgz
 
 ## Token 与状态
 
-默认状态文件为 `$DSH_HOME/jumpserver.json`，未设置 `DSH_HOME` 时为 `~/.dsh/jumpserver.json`。OAuth Token 保存在宿主侧文件中，文件权限 `0600`；不返回设置页，不进入代码、日志或 URL。插件配置可通过 `statePath` 指定其他状态文件。
+状态格式为 `version: 2`，使用单个 `connection` 对象；未配置时为 `null`。默认状态文件为 `$DSH_HOME/jumpserver.json`，未设置 `DSH_HOME` 时为 `~/.dsh/jumpserver.json`。OAuth Token 保存在宿主侧文件中，文件权限 `0600`；不返回设置页，不进入代码、日志或 URL。插件配置可通过 `statePath` 指定其他状态文件。
 
 刷新在请求前根据 `expires_in` 提前触发。401 可触发一次刷新并重试被拒绝的请求；网络故障不会自动重放命令。进程内合并刷新请求，进程间通过文件锁串行刷新和状态写入，原子替换保存轮换后的 Token。`invalid_grant` 等永久错误停止刷新并提示重新授权。轮换成功但写盘失败时停止后续刷新，修复状态目录后重新授权。
 
 锁目录为状态文件旁的 `.lock`。仅回收已退出进程或长时间未完成的持有者；不会按存活进程的锁年龄抢占。异常遗留的 `.lock.reclaim` 需要检查后人工清理，避免并发抢占。
 
-实例配置默认属于本机 DSH 用户，工具在该 profile 的会话中全局可用。多个 DSH 进程使用相同 `DSH_HOME` 时共享凭据。第一版不提供项目级工具隔离。
+连接配置默认属于本机 DSH 用户，工具在该 profile 的会话中全局可用。多个 DSH 进程使用相同 `DSH_HOME` 时共享凭据。第一版不提供项目级工具隔离。
 
 ## 操作结果
 
