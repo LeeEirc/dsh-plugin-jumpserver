@@ -29,7 +29,7 @@ const en = {
   connected: 'Connected', 'needs-auth': 'Authorization required', authorizing: 'Waiting for browser', connecting: 'Connecting', disabled: 'Disabled', disconnected: 'Disconnected', error: 'Connection failed',
   tools: 'Tools', logs: 'Diagnostics', empty: 'No JumpServer instances yet.', none: 'No diagnostics yet', expires: 'Token expires', refreshed: 'Last refreshed',
   deleteQuestion: 'Delete this instance and its local tokens? Revoke authorization first to revoke the server grant.', logoutQuestion: 'Revoke OAuth authorization for this instance?',
-  authHint: 'Sign in, select an organization and consent in the new page. This page updates automatically.',
+  authHint: 'Sign in and authorize access to your available organizations in the new page. This page updates automatically.',
   nameHint: 'Start with a lowercase letter; use lowercase letters, digits and underscores. Used in tool names.',
   fileTransfer: 'Upload and download files', fileRootHint: 'Paths start at the virtual SFTP root /, which may differ from SSH paths. Maximum 100 MiB per transfer.',
   fileSearch: 'Search assets', fileAsset: 'Asset', fileAccount: 'SFTP account', fileChoose: 'Select', filePath: 'Remote file path', fileSelect: 'Choose a local file',
