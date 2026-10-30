@@ -7,12 +7,13 @@ export async function provider({ files = false } = {}) {
   const tools = [
     { name: 'search_assets', description: 'Find permitted assets', inputSchema: { type: 'object', properties: { limit: { type: 'integer' } } } },
     { name: 'execute_command', description: 'Submit an operation', inputSchema: { type: 'object', properties: { command: { type: 'string' }, idempotency_key: { type: 'string' } }, required: ['command', 'idempotency_key'] } },
-    { name: 'get_action', description: 'Read an action', inputSchema: { type: 'object', properties: { action_id: { type: 'string' } }, required: ['action_id'] } },
+    { name: 'query_actions', description: 'Read an action', inputSchema: { type: 'object', properties: { operation: { type: 'string', enum: ['get'] }, action_id: { type: 'string' } }, required: ['operation', 'action_id'] } },
   ];
   if (files) {
-    for (const name of ['connect_asset', 'disconnect_asset', 'upload_file', 'download_file', 'cancel_action']) tools.push({ name, inputSchema: { type: 'object', additionalProperties: true } });
+    for (const name of ['connect_asset', 'disconnect_asset', 'query_sessions', 'file_write', 'file_read', 'cancel_action', 'open_terminal']) tools.push({ name, inputSchema: { type: 'object', additionalProperties: true } });
     state.fileActions = new Map(); state.fileRequests = 0;
     state.fileBytes = Buffer.from('verified file\0\xff\n中文');
+    state.toolCalls = [];
   }
   const json = (res, code, value) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(value)); };
   const server = createServer(async (req, res) => {
@@ -87,7 +88,7 @@ export async function provider({ files = false } = {}) {
       let result;
       if (rpc.method === 'initialize') {
         if (state.initializeGate) { state.initializing?.(); await state.initializeGate; }
-        result = { protocolVersion: rpc.params.protocolVersion, serverInfo: { name: 'jumpserver-test', version: '1' }, capabilities: { tools: {} }, instructions: 'Keep action_id and get_action.' };
+        result = { protocolVersion: rpc.params.protocolVersion, serverInfo: { name: 'jumpserver-test', version: '1' }, capabilities: { tools: {} }, instructions: 'Keep action_id and query_actions.' };
       }
       else if (rpc.method === 'tools/list') result = { tools };
       else if (rpc.method === 'tools/call') {
@@ -96,17 +97,18 @@ export async function provider({ files = false } = {}) {
         let value = rpc.params.name === 'search_assets' ? { results: [] } : { action_id: 'action-1', status: 'awaiting_approval', approval_url: `${base}/approval`, audit_status: 'pending', next_offset: 3, evidence_pending: true };
         if (files) {
           const { name, arguments: args } = rpc.params;
+          state.toolCalls.push({ name, args });
           if (name === 'search_assets') value = { results: [{ id: 'asset', name: 'asset', accounts: [{ id: 'account-id', name: 'root', username: 'root', protocols: ['ssh', 'sftp'] }] }] };
           if (name === 'connect_asset') {
             value = { session_id: 'file-session', action_id: `connect-${state.calls}`, status: 'ready' };
             state.fileActions.set(value.action_id, { ...value, status: 'succeeded' });
           }
-          if (name === 'upload_file' || name === 'download_file') {
-            value = { action_id: `${name}-${state.calls}`, session_id: 'file-session', status: name === 'upload_file' ? state.fileApproval ? 'awaiting_approval' : 'queued' : 'succeeded', request: args,
+          if ((name === 'file_write' && args.operation === 'upload') || (name === 'file_read' && args.operation === 'download')) {
+            value = { action_id: `${args.operation}-${state.calls}`, session_id: 'file-session', status: args.operation === 'upload' ? state.fileApproval ? 'awaiting_approval' : 'queued' : 'succeeded', request: args,
               result: { size: state.fileBytes.length, sha256: createHash('sha256').update(state.fileBytes).digest('hex') } };
             state.fileActions.set(value.action_id, value);
           }
-          if (name === 'get_action') value = state.fileActions.get(args.action_id) || value;
+          if (name === 'query_actions' && args.operation === 'get') value = state.fileActions.get(args.action_id) || value;
           if (name === 'disconnect_asset') value = { session_id: args.session_id, status: 'closed' };
           if (name === 'cancel_action') value = { action_id: args.action_id, status: 'cancelled' };
         }

@@ -61,7 +61,7 @@ dsh plugin --profile web add /完整路径/dsh-plugin-jumpserver-0.2.0.tgz
 
 服务端当前提供资产搜索、连接/断开、命令执行、操作查询/取消、SFTP 文件操作、文件上传下载登记和人工终端交接。工具目录以实际 `tools/list` 为准，支持分页及工具变更通知。
 
-`execute_command` 等工具返回 `action_id` 后，仍须使用 `get_action` 查询。HTTP 成功、MCP 调用成功、操作已接受均不代表资产执行成功。插件保留 `structuredContent`、审批/交接/审计链接、事件游标和审计状态，并向模型提供服务端操作说明。
+`execute_command` 等工具返回 `action_id` 后，仍须使用 `query_actions(operation=get)` 查询。HTTP 成功、MCP 调用成功、操作已接受均不代表资产执行成功。插件保留 `structuredContent`、审批/交接/审计链接、事件游标和审计状态，并向模型提供服务端操作说明。
 
 - 每个新操作使用新的 `idempotency_key`，重试同一操作保持原参数和原键。
 - `unknown` 结果禁止自动重发，须先核对资产状态。
@@ -69,7 +69,7 @@ dsh plugin --profile web add /完整路径/dsh-plugin-jumpserver-0.2.0.tgz
 - SSH 命令之间不共享 Shell 状态，工作目录和环境变量使用 `cwd` / `env` 显式传入。
 - 在 DSH 的“设置 → JumpServer → 文件上传与下载”中搜索资产、选择 SFTP 账号和虚拟远端路径，可上传本机文件或下载资产文件。插件建立专用 SFTP 会话并负责文件流；操作仍经过 Core 授权、审批及审计。每次最多 100 MiB，同时最多传输两个文件。
 - SFTP 的 `/` 是平台配置的虚拟根目录，可能与 SSH 的系统 `/` 不同。先确认该目录的可见路径；没有 SFTP 授权时须先调整授权，不能靠 SSH/base64 绕过文件策略。
-- `upload_file` / `download_file` 本身登记操作；仅轮询不会上传字节。浏览器文件流经 DSH 已认证的 Connection 路由转发，OAuth Token 始终留在宿主侧。上传按登记大小和 SHA256 校验；下载先核对审计结果、响应头、实际长度和 SHA256，再交付给浏览器。小文本仍可使用 `read_file` / `write_file`。
+- `file_write(operation=upload)` / `file_read(operation=download)` 本身登记操作；仅轮询不会上传字节。浏览器文件流经 DSH 已认证的 Connection 路由转发，OAuth Token 始终留在宿主侧。上传按登记大小和 SHA256 校验；下载先核对审计结果、响应头、实际长度和 SHA256，再交付给浏览器。小文本仍可使用 `file_read(operation=read)` / `file_write(operation=write)`。
 - 人工审批或凭据输入通过面板中的 JumpServer 链接完成，再点击“继续查询”。未确认结果的上传不会自动重传；关闭记录会请求取消未完成操作并释放会话。刷新页面会丢失本机文件选择，须先查看原操作审计；不支持断点续传。
 
 ## 开发

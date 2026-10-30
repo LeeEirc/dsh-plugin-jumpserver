@@ -44,6 +44,10 @@ test('browser bytes travel through authenticated file routes and verified downlo
   assert.equal(response.status, 200);
   assert.deepEqual(Buffer.from(await response.arrayBuffer()), bytes);
   assert.equal(manager.files.active, 0);
+  assert.equal((await manager.status()).toolCount, 10);
+  assert.ok(remote.state.toolCalls.some(call => call.name === 'query_actions' && call.args.operation === 'get'));
+  assert.ok(remote.state.toolCalls.some(call => call.name === 'file_write' && call.args.operation === 'upload'));
+  assert.ok(remote.state.toolCalls.some(call => call.name === 'file_read' && call.args.operation === 'download'));
 });
 
 test('approval blocks byte transfer and streaming 401 is never replayed', async t => {
