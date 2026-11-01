@@ -67,10 +67,11 @@ dsh plugin --profile web add /完整路径/dsh-plugin-jumpserver-0.2.0.tgz
 - `unknown` 结果禁止自动重发，须先核对资产状态。
 - 审批、MFA、个人凭据和敏感输入通过返回的 JumpServer 页面完成。
 - SSH 命令之间不共享 Shell 状态，工作目录和环境变量使用 `cwd` / `env` 显式传入。
-- 在 DSH 的“设置 → JumpServer → 文件上传与下载”中搜索资产、选择 SFTP 账号和虚拟远端路径，可上传本机文件或下载资产文件。插件建立专用 SFTP 会话并负责文件流；操作仍经过 Core 授权、审批及审计。每次最多 100 MiB，同时最多传输两个文件。
+- 文件通过 DSH 对话中的原生附件入口选择，或使用当前会话工作区内的文件。Agent 使用已有的 SFTP 会话调用 `file_write(operation=upload)`，传入插件侧的 `local_path`；插件将源文件保存为不可变附件，并自动计算大小和 SHA256。`local_path` 不发送到 JumpServer。每次最多 100 MiB，同时最多传输两个文件。
 - SFTP 的 `/` 是平台配置的虚拟根目录，可能与 SSH 的系统 `/` 不同。先确认该目录的可见路径；没有 SFTP 授权时须先调整授权，不能靠 SSH/base64 绕过文件策略。
-- `file_write(operation=upload)` / `file_read(operation=download)` 本身登记操作；仅轮询不会上传字节。浏览器文件流经 DSH 已认证的 Connection 路由转发，OAuth Token 始终留在宿主侧。上传按登记大小和 SHA256 校验；下载先核对审计结果、响应头、实际长度和 SHA256，再交付给浏览器。小文本仍可使用 `file_read(operation=read)` / `file_write(operation=write)`。
-- 人工审批或凭据输入通过面板中的 JumpServer 链接完成，再点击“继续查询”。未确认结果的上传不会自动重传；关闭记录会请求取消未完成操作并释放会话。刷新页面会丢失本机文件选择，须先查看原操作审计；不支持断点续传。
+- 插件接续 `file_write(operation=upload)` / `file_read(operation=download)` 返回的原 `action_id` 传输文件字节。需要人工审批或凭据输入时，打开返回的 JumpServer 链接，完成后调用 `query_actions(operation=get)`，继续同一操作。插件不再另建或自动关闭 SFTP 会话；操作仍经过 Core 授权、审批及审计，OAuth Token 始终留在宿主侧。
+- 下载核对审计结果、响应头、实际长度和 SHA256 后写入 DSH 原生附件存储，工具结果包含文件附件及 `local_file.path`，可继续在会话中读取、处理或通过 DSH 文件链接交付；预览及浏览器下载遵循 DSH 原生文件服务的大小限制。文件字节不进入模型参数或上下文。小文本仍可使用 `file_read(operation=read)` / `file_write(operation=write)`。
+- `local_transfer.state` 表示客户端字节传输状态：`uploaded` 仅表示上传字节已提交，最终执行结果仍须查询原操作；`stored` 表示下载已校验并保存。`unknown` 禁止自动重传；`source_required` 表示当前会话缺少原上传源，须核对原操作并使用原幂等键和相同源文件恢复。原生工具结果保留附件及传输证据供会话恢复，不支持断点续传。
 
 ## 开发
 

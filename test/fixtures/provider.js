@@ -30,7 +30,7 @@ export async function provider({ files = false } = {}) {
       if (!action) { res.writeHead(404); res.end(); return; }
       if (url.pathname.endsWith('/upload')) {
         if (action.status !== 'queued' || bytes.length !== action.request.size || createHash('sha256').update(bytes).digest('hex') !== action.request.sha256) { res.writeHead(409); res.end(); return; }
-        state.fileBytes = bytes; action.status = 'succeeded'; action.result = { size: bytes.length, sha256: action.request.sha256 };
+        state.fileBytes = bytes; action.status = state.uploadPending ? 'running' : 'succeeded'; action.result = { size: bytes.length, sha256: action.request.sha256 };
         json(res, 200, action); return;
       }
       const payload = state.badDownload ? Buffer.alloc(state.fileBytes.length, 0) : state.fileBytes;
@@ -104,13 +104,26 @@ export async function provider({ files = false } = {}) {
             state.fileActions.set(value.action_id, { ...value, status: 'succeeded' });
           }
           if ((name === 'file_write' && args.operation === 'upload') || (name === 'file_read' && args.operation === 'download')) {
-            value = { action_id: `${args.operation}-${state.calls}`, session_id: 'file-session', status: args.operation === 'upload' ? state.fileApproval ? 'awaiting_approval' : 'queued' : 'succeeded', request: args,
-              result: { size: state.fileBytes.length, sha256: createHash('sha256').update(state.fileBytes).digest('hex') } };
+            value = { action_id: `${args.operation}-${state.calls}`, kind: args.operation === 'upload' ? 'file_upload' : 'file_download', session_id: args.session_id,
+              status: args.operation === 'upload' ? state.fileApproval ? 'awaiting_approval' : 'queued' : state.downloadPending ? 'accepted' : 'succeeded', request: { path: args.remote_path, size: args.size, sha256: args.sha256, overwrite: args.overwrite },
+              request_hash: createHash('sha256').update(JSON.stringify(args)).digest('hex'),
+              result: { file: { path: args.remote_path }, size: state.fileBytes.length, sha256: createHash('sha256').update(state.fileBytes).digest('hex') } };
             state.fileActions.set(value.action_id, value);
           }
           if (name === 'query_actions' && args.operation === 'get') value = state.fileActions.get(args.action_id) || value;
           if (name === 'disconnect_asset') value = { session_id: args.session_id, status: 'closed' };
           if (name === 'cancel_action') value = { action_id: args.action_id, status: 'cancelled' };
+          if (['file_upload', 'file_download'].includes(value.kind)) {
+            const upload = value.kind === 'file_upload', metadata = upload ? value.request : value.result;
+            value = { ...value, transfer: { url: `${base}/koko/mcp/files/${upload ? 'upload' : 'download'}`, method: upload ? 'POST' : 'GET',
+              ready: upload ? value.status === 'queued' : value.status === 'succeeded', headers: { 'X-JumpServer-Action-ID': value.action_id },
+              size: metadata.size, sha256: metadata.sha256 } };
+            if (state.badTransfer) value.transfer.url = `${base}/untrusted`;
+            if (name === 'query_actions') {
+              delete value.request;
+              if (upload) { delete value.transfer.size; delete value.transfer.sha256; }
+            }
+          }
         }
         result = { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value };
       } else { json(res, 200, { jsonrpc: '2.0', id: rpc.id, error: { code: -32601, message: 'Method not found' } }); return; }
