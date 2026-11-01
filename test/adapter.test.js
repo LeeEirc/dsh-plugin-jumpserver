@@ -68,6 +68,34 @@ test('equivalent JSON tool content is rendered once despite escaping and key ord
   assert.equal(renderResult({}, { content, structuredContent })[0].text, JSON.stringify(structuredContent));
 });
 
+test('grouped tools expose object parameters without wrapping MCP arguments', async () => {
+  const operation = value => ({ type: 'string', const: value });
+  const branch = (value, properties, required = []) => ({ type: 'object', properties: {
+    operation: operation(value), session_id: { type: 'string' }, ...properties,
+  }, required: ['operation', 'session_id', ...required], additionalProperties: false });
+  const inputSchema = { type: 'object', oneOf: [
+    branch('list', { limit: { type: 'integer', description: 'Directory limit' } }),
+    { oneOf: [
+      branch('read', { path: { type: 'string' }, limit: { type: 'integer', description: 'Read limit' } }, ['path']),
+      branch('read', { idempotency_key: { type: 'string' } }, ['idempotency_key']),
+    ] },
+  ] };
+  const original = JSON.stringify(inputSchema);
+  const calls = [];
+  const manager = { call: async (...args) => { calls.push(args); return { content: [] }; } };
+  const tool = toolDefinition(manager, { row: { id: 'connection', timeoutMs: 1000 } }, { name: 'file_read', inputSchema });
+  assert.equal(tool.parameters.type, 'object');
+  assert.equal(tool.parameters.oneOf, undefined);
+  assert.deepEqual(tool.parameters.properties.operation.enum, ['list', 'read']);
+  assert.deepEqual(tool.parameters.properties.limit, { type: 'integer', description: 'Directory limit' });
+  assert.deepEqual(tool.parameters.required, ['operation', 'session_id']);
+  assert.ok(tool.parameters.properties.path && tool.parameters.properties.idempotency_key);
+  const args = { operation: 'list', session_id: 'session', limit: 10 };
+  await tool.execute(args);
+  assert.deepEqual(calls[0].slice(0, 3), ['connection', 'file_read', args]);
+  assert.equal(JSON.stringify(inputSchema), original);
+});
+
 test('concurrent requests serialize refresh rotation across manager instances', async t => {
   const { remote, store, manager, row, authorize } = await setup(t);
   await authorize();
