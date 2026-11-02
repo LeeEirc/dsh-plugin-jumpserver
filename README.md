@@ -28,7 +28,7 @@ dsh plugin --profile web add /完整路径/dsh-plugin-jumpserver-0.2.0.tgz
 
 1. 配置 JumpServer：地址如 `https://jumpserver.example.com/koko/mcp`，填写后点击“保存配置”。只填写站点 origin 时自动补上 `/koko/mcp`；完整 MCP 地址末尾不能带 `/`。
 2. 点击“浏览器授权”，在 JumpServer 登录并确认授权。部分部署还会要求确认跳转到本机回调。
-3. 授权完成后自动连接并发现工具，JumpServer 页面显示状态、工具列表、Token 有效期和诊断日志。浏览器未自动打开时点击“打开授权页面”。
+3. 授权完成后自动连接并发现工具，JumpServer 页面显示状态、工具数量、Token 有效期和诊断日志。工具目录默认收起，展开后可按需查看各工具的说明及完整调用名。浏览器未自动打开时点击“打开授权页面”。
 4. 在 DSH 会话中使用工具，名称为 `mcp__jumpserver__<原始工具名>`，例如 `mcp__jumpserver__search_assets`。
 5. 已配置的连接默认收起配置表单，点击“连接设置”可修改地址、超时、撤销授权或清除配置。修改地址会清除本地 OAuth 凭据，需要重新授权。停用保留凭据并卸载工具；“撤销授权”调用服务端撤销端点并删除本地 Token，保留客户端注册信息；“清除配置”删除本地连接及其凭据。
 
