@@ -22,17 +22,17 @@ npm pack
 dsh plugin --profile web add /完整路径/dsh-plugin-jumpserver-0.2.0.tgz
 ```
 
-安装后重启对应 DSH profile，打开 **设置 → JumpServer**。包中的 `cordis.patch.yml` 自动启用插件。
+安装后重启对应 DSH profile，点击左侧导航中的 **JumpServer** 打开独立页面。包中的 `cordis.patch.yml` 自动启用插件。
 
 ## 使用
 
 1. 配置 JumpServer：地址如 `https://jumpserver.example.com/koko/mcp`，填写后点击“保存配置”。只填写站点 origin 时自动补上 `/koko/mcp`；完整 MCP 地址末尾不能带 `/`。
 2. 点击“浏览器授权”，在 JumpServer 登录并确认授权。部分部署还会要求确认跳转到本机回调。
-3. 授权完成后自动连接并发现工具，设置页显示状态、工具列表、Token 有效期和诊断日志。浏览器未自动打开时点击“打开授权页面”。
+3. 授权完成后自动连接并发现工具，JumpServer 页面显示状态、工具列表、Token 有效期和诊断日志。浏览器未自动打开时点击“打开授权页面”。
 4. 在 DSH 会话中使用工具，名称为 `mcp__jumpserver__<原始工具名>`，例如 `mcp__jumpserver__search_assets`。
-5. 修改地址会清除本地 OAuth 凭据，需要重新授权。停用保留凭据并卸载工具；“撤销授权”调用服务端撤销端点并删除本地 Token，保留客户端注册信息；“清除配置”删除本地连接及其凭据。
+5. 已配置的连接默认收起配置表单，点击“连接设置”可修改地址、超时、撤销授权或清除配置。修改地址会清除本地 OAuth 凭据，需要重新授权。停用保留凭据并卸载工具；“撤销授权”调用服务端撤销端点并删除本地 Token，保留客户端注册信息；“清除配置”删除本地连接及其凭据。
 
-插件列表及设置页固定显示 **JumpServer**，包名为 `dsh-plugin-jumpserver`，内部插件 ID 为 `jumpserver`。JumpServer OAuth 授权页中的客户端名称固定为 **DeepSeek Harness**，同一连接重复授权会复用已保存的 `client_id`。
+插件列表及独立页面固定显示 **JumpServer**，包名为 `dsh-plugin-jumpserver`，内部插件 ID 为 `jumpserver`。连接配置、授权、工具目录及诊断统一在独立页面管理，DSH 全局设置不再注册 JumpServer 入口。JumpServer OAuth 授权页中的客户端名称固定为 **DeepSeek Harness**，同一连接重复授权会复用已保存的 `client_id`。
 
 每份状态配置只保存一个 JumpServer 连接，界面不提供自定义实例名和多实例列表；宿主侧拒绝创建第二条配置，并在同一 DSH 运行上下文中限制插件重复加载。切换站点须修改地址并重新授权，授权范围以 JumpServer 权限为准。不同电脑或用户保持各自独立的授权。
 
@@ -40,7 +40,7 @@ dsh plugin --profile web add /完整路径/dsh-plugin-jumpserver-0.2.0.tgz
 
 ## 桌面与 Web
 
-- 设置页使用 DSH 原生 Remote 服务，支持桌面 IPC 和 Web 通道，不要求 Electron 的 `file://` 页面使用相对 HTTP 请求。
+- 独立页面使用 DSH 原生导航插槽及 Remote 服务，支持桌面 IPC 和 Web 通道，不要求 Electron 的 `file://` 页面使用相对 HTTP 请求。
 - 桌面授权自动在 `127.0.0.1` 临时监听回调，完成或超时后释放。首次动态注册使用 public client、PKCE S256、`agent:access` 和精确 MCP resource，无需客户端密钥。
 - 本机 HTTP Web 优先使用 DSH Web 服务的回调路由。浏览器通过 `localhost` 访问时回调改用 `127.0.0.1`，符合当前 JumpServer 的 IP 回环要求。
 - 动态注册允许本机端口变化，插件持久化并复用 client ID。
@@ -49,7 +49,7 @@ dsh plugin --profile web add /完整路径/dsh-plugin-jumpserver-0.2.0.tgz
 
 ## Token 与状态
 
-状态格式为 `version: 2`，使用单个 `connection` 对象；未配置时为 `null`。默认状态文件为 `$DSH_HOME/jumpserver.json`，未设置 `DSH_HOME` 时为 `~/.dsh/jumpserver.json`。OAuth Token 保存在宿主侧文件中，文件权限 `0600`；不返回设置页，不进入代码、日志或 URL。插件配置可通过 `statePath` 指定其他状态文件。
+状态格式为 `version: 2`，使用单个 `connection` 对象；未配置时为 `null`。默认状态文件为 `$DSH_HOME/jumpserver.json`，未设置 `DSH_HOME` 时为 `~/.dsh/jumpserver.json`。OAuth Token 保存在宿主侧文件中，文件权限 `0600`；不返回前端页面，不进入代码、日志或 URL。插件配置可通过 `statePath` 指定其他状态文件。
 
 刷新在请求前根据 `expires_in` 提前触发。401 可触发一次刷新并重试被拒绝的请求；网络故障不会自动重放命令。进程内合并刷新请求，进程间通过文件锁串行刷新和状态写入，原子替换保存轮换后的 Token。`invalid_grant` 等永久错误停止刷新并提示重新授权。轮换成功但写盘失败时停止后续刷新，修复状态目录后重新授权。
 
@@ -80,7 +80,7 @@ npm test
 npm run build
 ```
 
-修改设置页源码 `src/client.js` 后执行 `npm run build`，生成 DSH 加载的 `lib/client.js`。单元测试使用本机隔离的 OAuth/MCP 服务，不需要外部环境或真实凭据。
+修改独立页面源码 `src/client.js` 后执行 `npm run build`，生成 DSH 加载的 `lib/client.js`。单元测试使用本机隔离的 OAuth/MCP 服务，不需要外部环境或真实凭据。
 
 ## 自动构建与 Release
 
