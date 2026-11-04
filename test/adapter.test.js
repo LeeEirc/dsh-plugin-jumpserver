@@ -133,6 +133,20 @@ test('401 refreshes once; an uncertain command response is never replayed', asyn
   assert.equal((await store.get(row.id)).needsReauth, false);
 });
 
+test('expired result pickup stops without refreshing OAuth or replaying an operation', async t => {
+  const { remote, store, manager, row, authorize } = await setup(t);
+  await authorize();
+  remote.state.expiredResult = true;
+  const entry = manager.connections.get(row.id);
+  const definition = toolDefinition(manager, entry, entry.tools.find(tool => tool.name === 'query_actions'));
+  const before = remote.state.calls;
+  await assert.rejects(definition.execute({ operation: 'get', action_id: 'old-action' }), /result_expired/);
+  assert.equal(remote.state.calls, before + 1);
+  assert.equal(remote.state.refreshes, 0);
+  assert.equal((await store.get(row.id)).needsReauth, false);
+  assert.equal((await manager.status()).status, 'connected');
+});
+
 test('disable and restart preserve credentials; endpoint edits invalidate them', async t => {
   const { store, manager, row, authorize } = await setup(t);
   await authorize();

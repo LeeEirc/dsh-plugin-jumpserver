@@ -93,6 +93,12 @@ export async function provider({ files = false } = {}) {
       else if (rpc.method === 'tools/list') result = { tools };
       else if (rpc.method === 'tools/call') {
         state.calls++;
+        if (state.expiredResult && rpc.params.name === 'query_actions') {
+          const error = { code: 'result_expired', http_status: 410, retryable: false, retry_mode: 'do_not_replay', next_step: 'stop' };
+          json(res, 200, { jsonrpc: '2.0', id: rpc.id, result: { isError: true,
+            content: [{ type: 'text', text: JSON.stringify({ error }) }], structuredContent: { error } } });
+          return;
+        }
         if (state.dropCommand && rpc.params.name === 'execute_command') { req.socket.destroy(); return; }
         let value = rpc.params.name === 'search_assets' ? { results: [] } : { action_id: 'action-1', status: 'awaiting_approval', approval_url: `${base}/approval`, audit_status: 'pending', next_offset: 3, evidence_pending: true };
         if (files) {

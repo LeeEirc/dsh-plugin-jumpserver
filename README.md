@@ -61,7 +61,9 @@ dsh plugin --profile web add /完整路径/dsh-plugin-jumpserver-0.2.0.tgz
 
 服务端当前提供资产搜索、连接/断开、命令执行、操作查询/取消、SFTP 文件操作、文件上传下载登记和人工终端交接。工具目录以实际 `tools/list` 为准，支持分页及工具变更通知。
 
-`execute_command` 等工具返回 `action_id` 后，仍须使用 `query_actions(operation=get)` 查询。HTTP 成功、MCP 调用成功、操作已接受均不代表资产执行成功。插件保留 `structuredContent`、审批/交接/审计链接、事件游标和审计状态，并向模型提供服务端操作说明。
+`execute_command` 等工具返回 `action_id` 后，仍须使用 `query_actions(operation=get)` 查询。HTTP 成功、MCP 调用成功、操作已接受均不代表资产执行成功。插件保留 `structuredContent`、审批/交接链接、事件游标和审计状态，并向模型提供服务端操作说明。
+
+运行查询不授予历史审计权限。`query_sessions(operation=list)` 仅列出有效会话，`query_actions(operation=list)` 必须提供 `session_id`。完成的结果及下载字节按服务端 `result_expires_at` 领取，期限为完成后 15 分钟。遇到 `result_expired` 应停止查询，不刷新授权或重新执行；历史证据由有权限的审计人员在 Lina 查看。插件沿用服务端工具约束和错误说明。
 
 - 每个新操作使用新的 `idempotency_key`，重试同一操作保持原参数和原键。
 - `unknown` 结果禁止自动重发，须先核对资产状态。
