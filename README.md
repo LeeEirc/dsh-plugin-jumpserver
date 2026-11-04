@@ -24,6 +24,22 @@ dsh plugin --profile web add /完整路径/dsh-plugin-jumpserver-0.2.0.tgz
 
 安装后重启对应 DSH profile，点击左侧导航中的 **JumpServer** 打开独立页面。包中的 `cordis.patch.yml` 自动启用插件。
 
+## 一句话接入
+
+在 JumpServer 的 **个人设置 > Agent / MCP > 接入文档** 中点击“复制给 Agent”，将说明发送给正在使用的 DSH。Agent 读取本站公开的简短指南，识别当前 profile，复用或安装插件，并引导用户在浏览器登录、确认授权。
+
+当前安装包提供 `jumpserver-mcp` 配置命令。在运行 DSH 的机器上执行：
+
+```bash
+jumpserver-mcp setup --url 'https://jumpserver.example.com/koko/mcp'
+```
+
+若命令不在 PATH 中，使用 `node` 运行已安装插件的 `lib/cli.js`，参数相同；不要通过 npm/npx 下载同名包。插件分发仍使用官方 GitHub Release 的 `.tgz` 和 `SHA256SUMS`。旧安装包若不含 `lib/cli.js`，须先更新插件。
+
+命令复用宿主的 `$DSH_HOME/jumpserver.json`（未设置时为 `~/.dsh/jumpserver.json`），保持单连接、固定名称及原 `client_id`。插件有自定义 `statePath` 时，必须用 `--state-path` 指向同一文件。已有授权可直接使用或按现有逻辑刷新；需要登录时输出浏览器授权链接，等待现有 PKCE 回调，不打印 Token。目标地址冲突、连接已停用、DCR 关闭且没有可复用客户端、额度不足等错误均停止，不覆盖配置或循环注册。
+
+命令仅验证 MCP 连接与工具发现，不连接资产或执行工具。完成后重新加载对应 DSH profile，或在 JumpServer 页面点击“重新连接”，使宿主加载已保存的连接；当前对话不一定能立即获得新工具。远程机器的回环回调仍需本地端口转发，用户在自己浏览器完成登录、授权和 MFA；不能改用远程域名回调规避限制。配置指南只在接入时读取，不加入每轮对话，也不新增 MCP 工具。
+
 ## 使用
 
 1. 配置 JumpServer：地址如 `https://jumpserver.example.com/koko/mcp`，填写后点击“保存配置”。只填写站点 origin 时自动补上 `/koko/mcp`；完整 MCP 地址末尾不能带 `/`。

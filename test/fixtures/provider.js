@@ -42,7 +42,7 @@ export async function provider({ files = false } = {}) {
     }
     if (url.pathname === '/.well-known/oauth-authorization-server') {
       json(res, 200, { issuer: base, authorization_endpoint: `${base}/authorize`, token_endpoint: `${base}/token`,
-        registration_endpoint: `${base}/register`, revocation_endpoint: `${base}/revoke`, scopes_supported: ['agent:access'],
+        registration_endpoint: state.registrationDisabled ? undefined : `${base}/register`, revocation_endpoint: `${base}/revoke`, scopes_supported: ['agent:access'],
         code_challenge_methods_supported: ['S256'], token_endpoint_auth_methods_supported: ['none'] }); return;
     }
     if (url.pathname === '/register') {

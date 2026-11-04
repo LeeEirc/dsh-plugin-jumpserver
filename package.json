@@ -4,6 +4,7 @@
   "description": "JumpServer OAuth and MCP adapter for DeepSeek Harness desktop and web",
   "type": "module",
   "main": "lib/index.js",
+  "bin": { "jumpserver-mcp": "lib/cli.js" },
   "exports": {
     ".": "./lib/index.js",
     "./client": "./lib/client.js",
