@@ -16,7 +16,7 @@ const zh = {
   tool_search_assets: '资产搜索', tool_connect_asset: '连接资产', tool_disconnect_asset: '断开连接', tool_execute_command: '执行命令',
   tool_query_actions: '操作查询', tool_query_sessions: '会话查询', tool_file_read: '文件读取', tool_file_write: '文件写入', tool_cancel_action: '取消操作', tool_open_terminal: '人工终端',
   logs: '诊断日志', refresh: '刷新', empty: '配置一个 JumpServer 地址后即可授权连接。', none: '暂无日志', expires: 'Token 到期', refreshed: '最近刷新',
-  deleteQuestion: '清除 JumpServer 连接配置及本地 Token？服务端授权可先通过“撤销授权”撤销。', logoutQuestion: '撤销 JumpServer 的 OAuth 授权？',
+  deleteQuestion: '撤销 JumpServer 授权并清除本地连接配置？', logoutQuestion: '撤销 JumpServer 的 OAuth 授权？',
   authHint: '在新页面登录并确认可访问组织的授权。授权完成后本页会自动更新。',
   authOpenFailed: '未能自动打开浏览器，请点击下方授权链接继续。',
   version: '插件版本', checkUpdate: '检查更新', checkingUpdate: '正在检查…', installUpdate: '更新到', installingUpdate: '正在更新…',
@@ -34,7 +34,7 @@ const en = {
   tool_search_assets: 'Search assets', tool_connect_asset: 'Connect asset', tool_disconnect_asset: 'Disconnect', tool_execute_command: 'Run command',
   tool_query_actions: 'Query operations', tool_query_sessions: 'Query sessions', tool_file_read: 'Read files', tool_file_write: 'Write files', tool_cancel_action: 'Cancel operation', tool_open_terminal: 'Human terminal',
   logs: 'Diagnostics', refresh: 'Refresh', empty: 'Configure a JumpServer URL to authorize and connect.', none: 'No diagnostics yet', expires: 'Token expires', refreshed: 'Last refreshed',
-  deleteQuestion: 'Clear the JumpServer configuration and local tokens? Revoke authorization first to revoke the server grant.', logoutQuestion: 'Revoke JumpServer OAuth authorization?',
+  deleteQuestion: 'Revoke JumpServer authorization and clear this connection?', logoutQuestion: 'Revoke JumpServer OAuth authorization?',
   authHint: 'Sign in and authorize access to your available organizations in the new page. This page updates automatically.',
   authOpenFailed: 'The browser could not open automatically. Use the authorization link below to continue.',
   version: 'Plugin version', checkUpdate: 'Check for updates', checkingUpdate: 'Checking…', installUpdate: 'Update to', installingUpdate: 'Updating…',
@@ -151,6 +151,7 @@ function JumpServerPage({ request, t }) {
     finally { setBusy(false); }
   };
   const authorize = () => run(async () => setAuthorization(await authorizeInBrowser(request, connection.id)));
+  const logout = () => { if (window.confirm(t('logoutQuestion'))) run(() => request({ action: 'logout', id: connection.id })); };
   const changeVersion = action => {
     setUpdateAction(action);
     return run(async () => {
@@ -177,7 +178,6 @@ function JumpServerPage({ request, t }) {
     h('div', { className: 'jsm-actions' }, h('button', { className: 'jsm-primary', type: 'submit', disabled: busy || !loaded }, t('save')),
       connection && action('cancel', () => setEditing(false)))),
     connection && h('div', { className: 'jsm-actions jsm-management' },
-      action('logout', () => { if (window.confirm(t('logoutQuestion'))) run(() => request({ action: 'logout', id: connection.id })); }),
       action('remove', () => { if (window.confirm(t('deleteQuestion'))) run(async () => {
         await request({ action: 'remove', id: connection.id });
         setEditing(false); setAuthorization(null); setLogs([]); setValues({ url: '', timeoutMs: '60000' });
@@ -205,8 +205,9 @@ function JumpServerPage({ request, t }) {
       h('div', { className: 'jsm-url' }, connection.url),
       connection.error && h('div', { className: 'jsm-error' }, connection.error),
       h('div', { className: 'jsm-actions' },
-        connection.enabled && action('authorize', authorize, { className: 'jsm-primary' }),
-        connection.enabled && action('connect', () => run(() => request({ action: 'connect', id: connection.id }))),
+        connection.authorized ? action('logout', logout, { className: 'jsm-danger' })
+          : connection.enabled && action('authorize', authorize, { className: 'jsm-primary' }),
+        connection.enabled && connection.authorized && action('connect', () => run(() => request({ action: 'connect', id: connection.id }))),
         action(connection.enabled ? 'disable' : 'enable', () => run(() => request({ action: 'update', id: connection.id, values: { enabled: !connection.enabled } }))),
         action('configuration', () => {
           if (!editing) setValues({ url: connection.url, timeoutMs: String(connection.timeoutMs) });

@@ -36,6 +36,7 @@ test('public PKCE authorization discovers tools and preserves action evidence', 
   assert.equal(remote.state.authorization.code_challenge_method, 'S256');
   const view = (await manager.status());
   assert.equal(view.status, 'connected');
+  assert.equal(view.authorized, true);
   assert.equal(view.toolCount, 3);
   assert.ok(!JSON.stringify(view).includes('access-0'));
   const entry = manager.connections.get(row.id);
@@ -118,6 +119,7 @@ test('invalid_grant stops spent-token retries and requires reauthorization', asy
   await assert.rejects(manager.oauth.token(row.id), { code: 'needs_auth' });
   assert.equal(remote.state.refreshes, 1);
   assert.equal((await manager.status()).status, 'needs-auth');
+  assert.equal((await manager.status()).authorized, false);
 });
 
 test('401 refreshes once; an uncertain command response is never replayed', async t => {
@@ -153,6 +155,7 @@ test('disable and restart preserve credentials; endpoint edits invalidate them',
   const clientId = (await store.get(row.id)).client.id;
   await manager.update(row.id, { enabled: false });
   assert.equal((await manager.status()).status, 'disabled');
+  assert.equal((await manager.status()).authorized, true);
   assert.ok((await store.get(row.id)).tokens);
   await manager.update(row.id, { enabled: true });
   assert.equal((await manager.status()).status, 'connected');
@@ -169,12 +172,84 @@ test('disable and restart preserve credentials; endpoint edits invalidate them',
 test('revocation clears local tokens and client registration is reused', async t => {
   const { remote, store, manager, row, authorize } = await setup(t);
   await authorize();
-  await authorize();
-  assert.equal(remote.state.registrations, 1);
+  const clientId = (await store.get(row.id)).client.id;
   await manager.logout(row.id);
   assert.equal(remote.state.revoked, true);
   assert.equal((await store.get(row.id)).tokens, undefined);
   assert.equal((await manager.status()).status, 'needs-auth');
+  assert.equal((await manager.status()).authorized, false);
+  const next = await manager.authorize(row.id);
+  assert.equal(new URL(next.authorizeUrl).searchParams.get('client_id'), clientId);
+  assert.equal(remote.state.registrations, 1);
+});
+
+test('clearing a disabled connection revokes its latest tokens before removing credentials', async t => {
+  const { remote, store, manager, row, authorize } = await setup(t);
+  await authorize();
+  await manager.oauth.token(row.id, { force: true });
+  await manager.update(row.id, { enabled: false });
+  const saved = await store.get(row.id);
+  const fetchImpl = manager.oauth.fetch;
+  let revokedToken;
+  manager.oauth.fetch = async (url, options) => {
+    if (url === saved.discovery.revocationEndpoint) {
+      const form = new URLSearchParams(options.body);
+      revokedToken = form.get('token');
+      assert.equal(form.get('token_type_hint'), 'refresh_token');
+      assert.equal(form.get('client_id'), saved.client.id);
+    }
+    return fetchImpl(url, options);
+  };
+  await manager.remove(row.id);
+  assert.equal(revokedToken, saved.tokens.refreshToken);
+  assert.equal(remote.state.revoked, true);
+  assert.equal(await manager.status(), null);
+});
+
+test('a failed remote revocation preserves configuration and credentials for retry', async t => {
+  const { remote, store, manager, row, authorize } = await setup(t);
+  await authorize();
+  const saved = await store.get(row.id);
+  const fetchImpl = manager.oauth.fetch;
+  manager.oauth.fetch = async (url, options) => url === saved.discovery.revocationEndpoint
+    ? Response.json({ error: 'temporarily_unavailable' }, { status: 503 }) : fetchImpl(url, options);
+  await assert.rejects(manager.remove(row.id), { code: 'temporarily_unavailable' });
+  assert.deepEqual(await store.get(row.id), saved);
+  assert.ok(!remote.state.revoked);
+  manager.oauth.fetch = fetchImpl;
+  await manager.remove(row.id);
+  assert.equal(remote.state.revoked, true);
+  assert.equal(await manager.status(), null);
+});
+
+test('missing revocation metadata cannot silently erase an authorized connection', async t => {
+  const { store, manager, row, authorize } = await setup(t);
+  await authorize();
+  await store.transaction(state => { delete state.connection.discovery.revocationEndpoint; });
+  const saved = await store.get(row.id);
+  await assert.rejects(manager.remove(row.id), { code: 'revocation_unavailable' });
+  assert.deepEqual(await store.get(row.id), saved);
+});
+
+test('a registration already removed on the server does not block clearing local configuration', async t => {
+  const { store, manager, row, authorize } = await setup(t);
+  await authorize();
+  const saved = await store.get(row.id);
+  const fetchImpl = manager.oauth.fetch;
+  manager.oauth.fetch = async (url, options) => url === saved.discovery.revocationEndpoint
+    ? Response.json({ error: 'invalid_client' }, { status: 401 }) : fetchImpl(url, options);
+  await manager.remove(row.id);
+  assert.equal(await manager.status(), null);
+});
+
+test('reauthorization replaces a registration the server reported as invalid', async t => {
+  const { remote, store, manager, row, authorize } = await setup(t);
+  await authorize();
+  await store.transaction(state => {
+    state.connection.needsReauth = true; state.connection.lastRefreshError = 'invalid_client';
+  });
+  await manager.authorize(row.id);
+  assert.equal(remote.state.registrations, 2);
 });
 
 test('a handshake completing after disable cannot restore tools', async t => {
