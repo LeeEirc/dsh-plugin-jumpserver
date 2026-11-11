@@ -19,10 +19,10 @@ const zh = {
   deleteQuestion: '撤销 JumpServer 授权并清除本地连接配置？', logoutQuestion: '撤销 JumpServer 的 OAuth 授权？',
   authHint: '在新页面登录并确认可访问组织的授权。授权完成后本页会自动更新。',
   authOpenFailed: '未能自动打开浏览器，请点击下方授权链接继续。',
-  version: '插件版本', checkUpdate: '检查更新', checkingUpdate: '正在检查…', installUpdate: '更新到', installingUpdate: '正在更新…',
+  version: '插件版本', checkUpdate: '检查更新', checkingUpdate: '检查中…', installUpdate: '更新', installingUpdate: '更新中…',
   development: '开发版',
-  upToDate: '暂无可用的新发布版本。', updateFound: '发现新版本', updateUnavailable: '当前 DSH 未启用原生插件管理，请在插件管理中更新。',
-  updated: '插件已更新，请重新打开此页面。', restartRequired: '新版本已安装，重启当前 DSH 后生效。',
+  upToDate: '暂无更新', updateUnavailable: '请在 DSH 插件管理中更新。',
+  updated: '已更新', reload: '重新加载', restartRequired: '重启 DSH 后生效。',
 };
 const en = {
   title: 'JumpServer', intro: 'Connect JumpServer to DeepSeek Harness. Authorize in your browser so your agent can use permitted assets, run commands, transfer files, and hand the terminal over to you when needed.',
@@ -37,17 +37,19 @@ const en = {
   deleteQuestion: 'Revoke JumpServer authorization and clear this connection?', logoutQuestion: 'Revoke JumpServer OAuth authorization?',
   authHint: 'Sign in and authorize access to your available organizations in the new page. This page updates automatically.',
   authOpenFailed: 'The browser could not open automatically. Use the authorization link below to continue.',
-  version: 'Plugin version', checkUpdate: 'Check for updates', checkingUpdate: 'Checking…', installUpdate: 'Update to', installingUpdate: 'Updating…',
+  version: 'Plugin version', checkUpdate: 'Check for updates', checkingUpdate: 'Checking…', installUpdate: 'Update', installingUpdate: 'Updating…',
   development: 'Development',
-  upToDate: 'No newer published version is available.', updateFound: 'New version available', updateUnavailable: 'Native plugin management is unavailable. Update through DSH plugin management.',
-  updated: 'Plugin updated. Reopen this page.', restartRequired: 'The new version is installed. Restart the current DSH to apply it.',
+  upToDate: 'No updates available', updateUnavailable: 'Update through DSH plugin management.',
+  updated: 'Updated', reload: 'Reload', restartRequired: 'Restart DSH to apply.',
 };
 
 const css = `
 .jsm-page{flex:1;min-height:0;overflow:auto;color:var(--dsw-alias-label-primary)}
 .jsm{box-sizing:border-box;max-width:1040px;margin:0 auto;padding:32px;display:flex;flex-direction:column;gap:20px}
 .jsm-title{padding-top:var(--dsh-frame-top-clearance,0px)}
-.jsm-title .jsm-head{justify-content:space-between}.jsm-title .jsm-head h1{margin:0}.jsm-title p{margin-top:8px}
+.jsm-title .jsm-head{justify-content:space-between}.jsm-title .jsm-head h1{margin:0}.jsm .jsm-title p{margin-top:8px}
+.jsm-heading{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}.jsm-version{font-size:12px;font-weight:400;white-space:nowrap;color:var(--dsw-alias-label-tertiary)}.jsm .jsm-version a{color:inherit}.jsm .jsm-version a:hover{color:var(--dsw-alias-state-business-primary)}
+.jsm-header-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.jsm-header-actions>a{font-size:12px}.jsm-title .jsm-update-message{font-size:12px;overflow-wrap:anywhere}.jsm-title .jsm-update-message[data-error=true]{color:var(--dsw-alias-state-error-primary)}
 .jsm h1{margin:0 0 8px;font-size:24px;line-height:1.4}.jsm h2{margin:0;font-size:16px;line-height:1.5}
 .jsm p{margin:0;color:var(--dsw-alias-label-secondary);line-height:1.6}
 .jsm-card{border:1px solid var(--dsw-alias-border-l2);border-radius:12px;padding:20px;background:var(--dsw-alias-bg-layer-3);display:flex;flex-direction:column;gap:16px;min-width:0}
@@ -102,18 +104,70 @@ function ToolsCatalog({ tools, t }) {
         h('div', { className: 'jsm-tool-body' }, h('code', null, `${TOOL_PREFIX}${tool.name}`), h('p', null, tool.description))))) : h('p', { className: 'jsm-catalog-empty' }, t('noTools'))));
 }
 
+function PluginHeader({ request, t, installBlocked, onInstallingChange }) {
+  const [pluginUpdate, setPluginUpdate] = React.useState({ currentVersion: PLUGIN_VERSION });
+  const [operation, setOperation] = React.useState('check-update');
+  const [message, setMessage] = React.useState(null);
+  React.useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const current = await request({ action: 'update-status' });
+        if (!active) return;
+        setPluginUpdate(current);
+        if (current.needsRestart || current.installedVersion) return;
+        const result = await request({ action: 'check-update' });
+        if (active) setPluginUpdate(result);
+      } catch (e) { if (active) setMessage({ text: e.message, error: true }); }
+      finally { if (active) setOperation(null); }
+    })();
+    return () => { active = false; };
+  }, [request]);
+  const needsReload = pluginUpdate.installedVersion && pluginUpdate.installedVersion !== pluginUpdate.currentVersion && !pluginUpdate.needsRestart;
+  const changeVersion = async () => {
+    if (needsReload) { window.location.reload(); return; }
+    const action = pluginUpdate.available ? 'install-update' : 'check-update';
+    setOperation(action); setMessage(null);
+    if (action === 'install-update') onInstallingChange(true);
+    try {
+      const result = await request({ action, ...(action === 'install-update' ? { version: pluginUpdate.latestVersion } : {}) });
+      setPluginUpdate(result);
+      if (action === 'check-update' && !result.available) setMessage({ text: t('upToDate') });
+    } catch (e) { setMessage({ text: e.message, error: true }); }
+    finally { setOperation(null); if (action === 'install-update') onInstallingChange(false); }
+  };
+  const label = t(operation === 'check-update' ? 'checkingUpdate' : operation === 'install-update' ? 'installingUpdate'
+    : pluginUpdate.needsRestart ? 'updated' : needsReload ? 'reload' : pluginUpdate.available ? 'installUpdate' : 'checkUpdate');
+  const hint = pluginUpdate.needsRestart ? t('restartRequired') : needsReload ? t('reload')
+    : pluginUpdate.available ? pluginUpdate.canInstall ? `${t('installUpdate')} v${pluginUpdate.latestVersion}` : t('updateUnavailable') : t('checkUpdate');
+  const notice = message?.text || (pluginUpdate.installedVersion
+    ? `${t('updated')} v${pluginUpdate.installedVersion}${pluginUpdate.needsRestart ? ` · ${t('restartRequired')}` : ''}`
+    : pluginUpdate.available && !pluginUpdate.canInstall ? t('updateUnavailable') : '');
+  return h('header', { className: 'jsm-title' },
+    h('div', { className: 'jsm-head' },
+      h('div', { className: 'jsm-heading' }, h('h1', null, DISPLAY_NAME),
+        h('span', { className: 'jsm-version', 'aria-label': t('version'), title: pluginUpdate.development ? t('development') : undefined }, `v${pluginUpdate.currentVersion}`,
+          pluginUpdate.commit && h(React.Fragment, null, ' · ', h('a', { href: `${GITHUB_URL}/commit/${pluginUpdate.commit}`, title: pluginUpdate.commit,
+            target: '_blank', rel: 'noopener noreferrer' }, pluginUpdate.commit.slice(0, 7))))),
+      h('div', { className: 'jsm-header-actions' },
+        h('a', { href: GITHUB_URL, title: GITHUB_URL, target: '_blank', rel: 'noopener noreferrer' }, 'GitHub ↗'),
+        h('button', { type: 'button', className: pluginUpdate.available && !operation ? 'jsm-primary' : undefined,
+          disabled: !!operation || pluginUpdate.needsRestart || (pluginUpdate.available && (!pluginUpdate.canInstall || installBlocked)) || (needsReload && installBlocked),
+          title: hint, 'aria-label': pluginUpdate.available && !operation ? hint : label, onClick: changeVersion }, label))),
+    h('p', null, t('intro')),
+    notice && h('p', { className: 'jsm-update-message', role: message?.error ? 'alert' : 'status', 'data-error': !!message?.error }, notice));
+}
+
 function JumpServerPage({ request, t }) {
   const [connection, setConnection] = React.useState(null);
   const [loaded, setLoaded] = React.useState(false);
   const [error, setError] = React.useState('');
   const [busy, setBusy] = React.useState(false);
+  const [installingPlugin, setInstallingPlugin] = React.useState(false);
   const [editing, setEditing] = React.useState(false);
   const [values, setValues] = React.useState({ url: '', timeoutMs: '60000' });
   const [authorization, setAuthorization] = React.useState(null);
   const [logs, setLogs] = React.useState([]);
-  const [pluginUpdate, setPluginUpdate] = React.useState({ currentVersion: PLUGIN_VERSION });
-  const [updateAction, setUpdateAction] = React.useState(null);
-  const [updateMessage, setUpdateMessage] = React.useState('');
   const refresh = React.useCallback(async () => {
     const row = await request({ action: 'status' });
     const entries = row ? await request({ action: 'logs', id: row.id }) : [];
@@ -138,12 +192,6 @@ function JumpServerPage({ request, t }) {
     const timer = setInterval(poll, 2500);
     return () => { active = false; clearInterval(timer); };
   }, [refresh]);
-  React.useEffect(() => {
-    let active = true;
-    request({ action: 'update-status' }).then(value => { if (active) setPluginUpdate(value); })
-      .catch(e => { if (active) setError(e.message); });
-    return () => { active = false; };
-  }, [request]);
   const run = async work => {
     setBusy(true); setError('');
     try { await work(); update(await refresh()); }
@@ -152,22 +200,12 @@ function JumpServerPage({ request, t }) {
   };
   const authorize = () => run(async () => setAuthorization(await authorizeInBrowser(request, connection.id)));
   const logout = () => { if (window.confirm(t('logoutQuestion'))) run(() => request({ action: 'logout', id: connection.id })); };
-  const changeVersion = action => {
-    setUpdateAction(action);
-    return run(async () => {
-      setUpdateMessage('');
-      const result = await request({ action, ...(action === 'install-update' ? { version: pluginUpdate.latestVersion } : {}) });
-      setPluginUpdate(result);
-      setUpdateMessage(result.needsRestart ? t('restartRequired') : action === 'install-update' ? t('updated')
-        : result.available ? `${t('updateFound')}: ${result.latestVersion}` : t('upToDate'));
-    }).finally(() => setUpdateAction(null));
-  };
   const field = (key, type = 'text') => h('label', { key }, t(key === 'timeoutMs' ? 'timeout' : key),
-    h('input', { type, required: true, disabled: busy, value: values[key], 'aria-label': t(key === 'timeoutMs' ? 'timeout' : key),
+    h('input', { type, required: true, disabled: busy || installingPlugin, value: values[key], 'aria-label': t(key === 'timeoutMs' ? 'timeout' : key),
       placeholder: key === 'url' ? 'https://jumpserver.example.com/koko/mcp' : undefined,
       min: type === 'number' ? 1000 : undefined, max: type === 'number' ? 600000 : undefined,
       onChange: event => setValues(old => ({ ...old, [key]: event.target.value })) }));
-  const action = (label, handler, extra = {}) => h('button', { type: 'button', disabled: busy || !loaded, onClick: handler, ...extra }, t(label));
+  const action = (label, handler, extra = {}) => h('button', { type: 'button', disabled: busy || installingPlugin || !loaded, onClick: handler, ...extra }, t(label));
   const configuration = h('section', { className: 'jsm-card', id: 'jumpserver-configuration', 'aria-labelledby': 'jumpserver-configuration-title' },
     h('h2', { id: 'jumpserver-configuration-title' }, t('configuration')),
     !connection && h('p', null, t('empty')),
@@ -175,7 +213,7 @@ function JumpServerPage({ request, t }) {
       await request({ ...(connection ? { action: 'update', id: connection.id } : { action: 'add' }), values });
       setEditing(false); setValues({ url: '', timeoutMs: '60000' });
     }); } }, h('div', { className: 'jsm-fields' }, field('url'), field('timeoutMs', 'number')),
-    h('div', { className: 'jsm-actions' }, h('button', { className: 'jsm-primary', type: 'submit', disabled: busy || !loaded }, t('save')),
+    h('div', { className: 'jsm-actions' }, h('button', { className: 'jsm-primary', type: 'submit', disabled: busy || installingPlugin || !loaded }, t('save')),
       connection && action('cancel', () => setEditing(false)))),
     connection && h('div', { className: 'jsm-actions jsm-management' },
       action('remove', () => { if (window.confirm(t('deleteQuestion'))) run(async () => {
@@ -184,20 +222,7 @@ function JumpServerPage({ request, t }) {
       }); }, { className: 'jsm-danger' })),
   );
   return h('div', { className: 'jsm-page', 'data-jumpserver-page': true }, h('main', { className: 'jsm', 'aria-label': DISPLAY_NAME },
-    h('header', { className: 'jsm-title' },
-      h('div', { className: 'jsm-head' }, h('h1', null, DISPLAY_NAME),
-        h('a', { href: GITHUB_URL, title: GITHUB_URL, target: '_blank', rel: 'noopener noreferrer' }, 'GitHub ↗')),
-      h('p', null, t('intro'))),
-    h('section', { className: 'jsm-card', 'aria-label': t('version') },
-      h('div', { className: 'jsm-head' }, h('h2', null, `v${pluginUpdate.currentVersion}`,
-        pluginUpdate.commit && h(React.Fragment, null, ' · ', h('a', { href: `${GITHUB_URL}/commit/${pluginUpdate.commit}`, title: pluginUpdate.commit,
-          target: '_blank', rel: 'noopener noreferrer' }, pluginUpdate.commit.slice(0, 7))),
-        pluginUpdate.development && h('small', null, ` · ${t('development')}`)),
-        h('button', { type: 'button', disabled: busy || connection?.status === 'authorizing', onClick: () => changeVersion('check-update') }, t(updateAction === 'check-update' ? 'checkingUpdate' : 'checkUpdate')),
-        pluginUpdate.available && h('button', { type: 'button', className: 'jsm-primary', disabled: busy || !pluginUpdate.canInstall || connection?.status === 'authorizing',
-          onClick: () => changeVersion('install-update') }, updateAction === 'install-update' ? t('installingUpdate') : `${t('installUpdate')} ${pluginUpdate.latestVersion}`)),
-      pluginUpdate.available && !pluginUpdate.canInstall && h('p', null, t('updateUnavailable')),
-      (updateMessage || pluginUpdate.needsRestart) && h('p', { role: 'status' }, updateMessage || t('restartRequired'))),
+    h(PluginHeader, { request, t, installBlocked: busy || connection?.status === 'authorizing', onInstallingChange: setInstallingPlugin }),
     error && h('div', { className: 'jsm-error', role: 'alert' }, error),
     !loaded && h('p', { role: 'status' }, t('loading')),
     connection && h('section', { className: 'jsm-card', 'data-connection': PLUGIN_ID, 'aria-labelledby': 'jumpserver-connection-title' },

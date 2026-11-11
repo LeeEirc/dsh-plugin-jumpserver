@@ -27,7 +27,7 @@ dsh plugin --profile web add /完整路径/dsh-plugin-jumpserver-0.1.1.tgz
 
 ### 更新插件
 
-页面顶部显示当前插件版本。点击“检查更新”读取本仓库 GitHub Release 的最新正式版本，发现更高版本后点击“更新到”对应版本。插件下载发布包并核对同一 Release 的 `SHA256SUMS`，再交给当前 profile 的 DSH 原生插件管理器安装；不会从 npm 下载同名插件。需要重启时按页面提示重启当前 DSH，更新后沿用原连接配置、`client_id` 和 OAuth Token。
+标题旁显示当前插件版本和短提交号。进入页面时检查本仓库 GitHub Release 的最新正式版本，发现更高版本后直接点击“更新”；没有更新时可手动再次检查。检查和更新的进度独立显示，检查不会阻塞授权或连接操作。插件下载发布包并核对同一 Release 的 `SHA256SUMS`，再交给当前 profile 的 DSH 原生插件管理器安装；不会从 npm 下载同名插件。安装后按提示重新加载页面或重启 DSH，更新后沿用原连接配置、`client_id` 和 OAuth Token。
 
 更新不会自动发布或安装预发布版本，也不会降级。没有启用 DSH 原生插件管理的 profile 应从原插件安装入口更新。校验后的安装包保存在状态文件旁的 `jumpserver-updates` 目录，供 profile 的本地包依赖继续使用，不应在该 profile 仍引用它时删除。开发代码须发布新版本后才能被其他客户端检查到；同一版本重建不会被视为新版本。
 
