@@ -13,7 +13,7 @@
   },
   "files": ["lib", "locale", "cordis.patch.yml", "README.md", "LICENSE", "THIRD_PARTY_NOTICES"],
   "license": "MIT",
-  "engines": { "node": "^22.19.0 || >=24.0.0", "dsh": ">=0.2.1-rc.2 <0.3.0" },
+  "engines": { "node": ">=24.9.0", "dsh": ">=0.2.2-rc.1 <0.3.0" },
   "scripts": {
     "build": "node scripts/build-client.mjs",
     "prepack": "npm run build",
@@ -21,8 +21,8 @@
   },
   "dependencies": { "@modelcontextprotocol/sdk": "^1.32.2", "zod": "^4.4.3" },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "~4.0.5",
-    "@deepseek-ai/dsh-typert-protocol": ">=0.2.1-rc.2 <0.3.0"
+    "@deepseek-ai/cordis": "~4.1.0",
+    "@deepseek-ai/dsh-typert-protocol": ">=0.2.2-rc.1 <0.3.0"
   },
   "devDependencies": {
     "esbuild": "^0.28.0"
