@@ -8,6 +8,8 @@ import * as plugin from '../lib/index.js';
 import { StateStore } from '../lib/store.js';
 import { JumpServerManager } from '../lib/manager.js';
 import { provider } from './fixtures/provider.js';
+import { Readable } from 'node:stream';
+import { PLUGIN_VERSION } from '../lib/identity.js';
 
 async function directory(t) {
   const path = await mkdtemp(join(tmpdir(), 'dsh-jumpserver-singleton-'));
@@ -90,4 +92,29 @@ test('unsupported multi-connection state is rejected without rewriting it', asyn
   await writeFile(path, original);
   await assert.rejects(new StateStore(path).transaction(() => {}), { code: 'state_read_failed' });
   assert.equal(await readFile(path, 'utf8'), original);
+});
+
+test('version controls use native Remote while the HTTP connection API cannot install packages', async t => {
+  const root = new Context();
+  t.after(() => root.fiber.dispose());
+  let route;
+  let installs = 0;
+  await root.plugin(ctx => {
+    ctx.provide('tools', { register: () => () => {} });
+    ctx.provide('pluginManager', { installBundle() { installs++; } });
+    ctx.provide('webServer', { register(value) { route = value; return () => {}; } });
+  });
+  await root.plugin(plugin, { statePath: join(await directory(t), 'state.json') });
+  const result = await root.get('jumpserver').request({ action: 'update-status' });
+  assert.equal(result.ok, true);
+  assert.equal(result.value.currentVersion, PLUGIN_VERSION);
+  assert.equal(result.value.canInstall, true);
+  assert.equal(Object.hasOwn(result.value, 'commit'), true);
+  const req = Readable.from([JSON.stringify({ action: 'install-update', version: '9.9.9' })]);
+  Object.assign(req, { url: '/jumpserver/api/request', method: 'POST', headers: { 'content-type': 'application/json' } });
+  let body;
+  await route.handler(req, { writeHead(status) { assert.equal(status, 200); }, end(value) { body = JSON.parse(value); } });
+  assert.equal(body.ok, false);
+  assert.equal(body.error.code, 'invalid_action');
+  assert.equal(installs, 0);
 });

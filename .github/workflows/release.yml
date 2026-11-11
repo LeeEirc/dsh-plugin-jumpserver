@@ -71,8 +71,19 @@ jobs:
 
       - name: Package plugin
         run: |
-          mkdir -p dist
-          npm pack --ignore-scripts --pack-destination dist
+          node scripts/pack.mjs
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFileSync } from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          const { name, version } = JSON.parse(readFileSync('package.json', 'utf8'));
+          const archive = `dist/${name}-${version}.tgz`;
+          const entry = path => execFileSync('tar', ['-xOf', archive, `package/${path}`], { encoding: 'utf8' });
+          assert.equal(entry('README.md'), readFileSync('docs/usage.md', 'utf8'));
+          const info = JSON.parse(entry('lib/build-info.json'));
+          assert.equal(info.commit, execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim());
+          assert.equal(info.development, false, 'Release packages must identify a clean source commit');
+          NODE
 
       - name: Generate checksum
         working-directory: dist

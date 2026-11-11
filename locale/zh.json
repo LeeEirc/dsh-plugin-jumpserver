@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "JumpServer",
-    "description": "连接 JumpServer，通过浏览器授权在 DeepSeek Harness 中使用 MCP 工具。"
+    "description": "在 DeepSeek Harness 中连接 JumpServer，让 Agent 使用你有权限的资产，执行命令、传输文件，并在需要时由你接管终端。"
   }
 }

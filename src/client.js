@@ -1,12 +1,13 @@
 import React from 'react';
 import { remoteContract } from '../lib/remote-contract.js';
-import { DISPLAY_NAME, PLUGIN_ID, TOOL_PREFIX } from '../lib/identity.js';
+import { DISPLAY_NAME, GITHUB_URL, PLUGIN_ID, PLUGIN_VERSION, TOOL_PREFIX } from '../lib/identity.js';
 import { claimSingleton } from '../lib/singleton.js';
+import { authorizeInBrowser } from '../lib/client-authorization.js';
 
 const h = React.createElement;
 export const inject = ['remote'];
 const zh = {
-  title: 'JumpServer', intro: '连接 JumpServer，在浏览器中授权后使用获准访问的资产工具。',
+  title: 'JumpServer', intro: '在 DeepSeek Harness 中连接 JumpServer，通过浏览器授权，让 Agent 使用你有权限的资产，执行命令、传输文件，并在需要时由你接管终端。',
   connection: '连接概览', configuration: '连接设置', loading: '正在读取连接…',
   url: 'JumpServer / MCP 地址', timeout: '工具调用超时（毫秒）', save: '保存配置', cancel: '取消',
   authorize: '浏览器授权', open: '打开授权页面', connect: '重新连接', edit: '编辑', disable: '停用', enable: '启用', logout: '撤销授权', remove: '清除配置',
@@ -17,9 +18,14 @@ const zh = {
   logs: '诊断日志', refresh: '刷新', empty: '配置一个 JumpServer 地址后即可授权连接。', none: '暂无日志', expires: 'Token 到期', refreshed: '最近刷新',
   deleteQuestion: '清除 JumpServer 连接配置及本地 Token？服务端授权可先通过“撤销授权”撤销。', logoutQuestion: '撤销 JumpServer 的 OAuth 授权？',
   authHint: '在新页面登录并确认可访问组织的授权。授权完成后本页会自动更新。',
+  authOpenFailed: '未能自动打开浏览器，请点击下方授权链接继续。',
+  version: '插件版本', checkUpdate: '检查更新', checkingUpdate: '正在检查…', installUpdate: '更新到', installingUpdate: '正在更新…',
+  development: '开发版',
+  upToDate: '暂无可用的新发布版本。', updateFound: '发现新版本', updateUnavailable: '当前 DSH 未启用原生插件管理，请在插件管理中更新。',
+  updated: '插件已更新，请重新打开此页面。', restartRequired: '新版本已安装，重启当前 DSH 后生效。',
 };
 const en = {
-  title: 'JumpServer', intro: 'Connect JumpServer and authorize in your browser to use permitted asset tools.',
+  title: 'JumpServer', intro: 'Connect JumpServer to DeepSeek Harness. Authorize in your browser so your agent can use permitted assets, run commands, transfer files, and hand the terminal over to you when needed.',
   connection: 'Connection overview', configuration: 'Connection settings', loading: 'Loading connection…',
   url: 'JumpServer / MCP URL', timeout: 'Tool call timeout (ms)', save: 'Save configuration', cancel: 'Cancel',
   authorize: 'Authorize in browser', open: 'Open authorization page', connect: 'Reconnect', edit: 'Edit', disable: 'Disable', enable: 'Enable', logout: 'Revoke authorization', remove: 'Clear configuration',
@@ -30,12 +36,18 @@ const en = {
   logs: 'Diagnostics', refresh: 'Refresh', empty: 'Configure a JumpServer URL to authorize and connect.', none: 'No diagnostics yet', expires: 'Token expires', refreshed: 'Last refreshed',
   deleteQuestion: 'Clear the JumpServer configuration and local tokens? Revoke authorization first to revoke the server grant.', logoutQuestion: 'Revoke JumpServer OAuth authorization?',
   authHint: 'Sign in and authorize access to your available organizations in the new page. This page updates automatically.',
+  authOpenFailed: 'The browser could not open automatically. Use the authorization link below to continue.',
+  version: 'Plugin version', checkUpdate: 'Check for updates', checkingUpdate: 'Checking…', installUpdate: 'Update to', installingUpdate: 'Updating…',
+  development: 'Development',
+  upToDate: 'No newer published version is available.', updateFound: 'New version available', updateUnavailable: 'Native plugin management is unavailable. Update through DSH plugin management.',
+  updated: 'Plugin updated. Reopen this page.', restartRequired: 'The new version is installed. Restart the current DSH to apply it.',
 };
 
 const css = `
 .jsm-page{flex:1;min-height:0;overflow:auto;color:var(--dsw-alias-label-primary)}
 .jsm{box-sizing:border-box;max-width:1040px;margin:0 auto;padding:32px;display:flex;flex-direction:column;gap:20px}
 .jsm-title{padding-top:var(--dsh-frame-top-clearance,0px)}
+.jsm-title .jsm-head{justify-content:space-between}.jsm-title .jsm-head h1{margin:0}.jsm-title p{margin-top:8px}
 .jsm h1{margin:0 0 8px;font-size:24px;line-height:1.4}.jsm h2{margin:0;font-size:16px;line-height:1.5}
 .jsm p{margin:0;color:var(--dsw-alias-label-secondary);line-height:1.6}
 .jsm-card{border:1px solid var(--dsw-alias-border-l2);border-radius:12px;padding:20px;background:var(--dsw-alias-bg-layer-3);display:flex;flex-direction:column;gap:16px;min-width:0}
@@ -99,6 +111,9 @@ function JumpServerPage({ request, t }) {
   const [values, setValues] = React.useState({ url: '', timeoutMs: '60000' });
   const [authorization, setAuthorization] = React.useState(null);
   const [logs, setLogs] = React.useState([]);
+  const [pluginUpdate, setPluginUpdate] = React.useState({ currentVersion: PLUGIN_VERSION });
+  const [updateAction, setUpdateAction] = React.useState(null);
+  const [updateMessage, setUpdateMessage] = React.useState('');
   const refresh = React.useCallback(async () => {
     const row = await request({ action: 'status' });
     const entries = row ? await request({ action: 'logs', id: row.id }) : [];
@@ -123,28 +138,28 @@ function JumpServerPage({ request, t }) {
     const timer = setInterval(poll, 2500);
     return () => { active = false; clearInterval(timer); };
   }, [refresh]);
+  React.useEffect(() => {
+    let active = true;
+    request({ action: 'update-status' }).then(value => { if (active) setPluginUpdate(value); })
+      .catch(e => { if (active) setError(e.message); });
+    return () => { active = false; };
+  }, [request]);
   const run = async work => {
     setBusy(true); setError('');
     try { await work(); update(await refresh()); }
     catch (e) { setError(e.message); }
     finally { setBusy(false); }
   };
-  const authorize = () => {
-    const popup = window.open('about:blank', '_blank');
-    if (popup) popup.opener = null;
-    run(async () => {
-      try {
-        const options = {};
-        if (location.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(location.hostname)) {
-          const callback = new URL(location.origin);
-          if (callback.hostname === 'localhost') callback.hostname = '127.0.0.1';
-          options.callbackOrigin = callback.origin;
-        }
-        const result = await request({ action: 'authorize', id: connection.id, options });
-        setAuthorization(result);
-        if (popup) popup.location.href = result.authorizeUrl;
-      } catch (e) { popup?.close(); throw e; }
-    });
+  const authorize = () => run(async () => setAuthorization(await authorizeInBrowser(request, connection.id)));
+  const changeVersion = action => {
+    setUpdateAction(action);
+    return run(async () => {
+      setUpdateMessage('');
+      const result = await request({ action, ...(action === 'install-update' ? { version: pluginUpdate.latestVersion } : {}) });
+      setPluginUpdate(result);
+      setUpdateMessage(result.needsRestart ? t('restartRequired') : action === 'install-update' ? t('updated')
+        : result.available ? `${t('updateFound')}: ${result.latestVersion}` : t('upToDate'));
+    }).finally(() => setUpdateAction(null));
   };
   const field = (key, type = 'text') => h('label', { key }, t(key === 'timeoutMs' ? 'timeout' : key),
     h('input', { type, required: true, disabled: busy, value: values[key], 'aria-label': t(key === 'timeoutMs' ? 'timeout' : key),
@@ -169,7 +184,20 @@ function JumpServerPage({ request, t }) {
       }); }, { className: 'jsm-danger' })),
   );
   return h('div', { className: 'jsm-page', 'data-jumpserver-page': true }, h('main', { className: 'jsm', 'aria-label': DISPLAY_NAME },
-    h('header', { className: 'jsm-title' }, h('h1', null, DISPLAY_NAME), h('p', null, t('intro'))),
+    h('header', { className: 'jsm-title' },
+      h('div', { className: 'jsm-head' }, h('h1', null, DISPLAY_NAME),
+        h('a', { href: GITHUB_URL, title: GITHUB_URL, target: '_blank', rel: 'noopener noreferrer' }, 'GitHub ↗')),
+      h('p', null, t('intro'))),
+    h('section', { className: 'jsm-card', 'aria-label': t('version') },
+      h('div', { className: 'jsm-head' }, h('h2', null, `v${pluginUpdate.currentVersion}`,
+        pluginUpdate.commit && h(React.Fragment, null, ' · ', h('a', { href: `${GITHUB_URL}/commit/${pluginUpdate.commit}`, title: pluginUpdate.commit,
+          target: '_blank', rel: 'noopener noreferrer' }, pluginUpdate.commit.slice(0, 7))),
+        pluginUpdate.development && h('small', null, ` · ${t('development')}`)),
+        h('button', { type: 'button', disabled: busy || connection?.status === 'authorizing', onClick: () => changeVersion('check-update') }, t(updateAction === 'check-update' ? 'checkingUpdate' : 'checkUpdate')),
+        pluginUpdate.available && h('button', { type: 'button', className: 'jsm-primary', disabled: busy || !pluginUpdate.canInstall || connection?.status === 'authorizing',
+          onClick: () => changeVersion('install-update') }, updateAction === 'install-update' ? t('installingUpdate') : `${t('installUpdate')} ${pluginUpdate.latestVersion}`)),
+      pluginUpdate.available && !pluginUpdate.canInstall && h('p', null, t('updateUnavailable')),
+      (updateMessage || pluginUpdate.needsRestart) && h('p', { role: 'status' }, updateMessage || t('restartRequired'))),
     error && h('div', { className: 'jsm-error', role: 'alert' }, error),
     !loaded && h('p', { role: 'status' }, t('loading')),
     connection && h('section', { className: 'jsm-card', 'data-connection': PLUGIN_ID, 'aria-labelledby': 'jumpserver-connection-title' },
@@ -184,7 +212,8 @@ function JumpServerPage({ request, t }) {
           if (!editing) setValues({ url: connection.url, timeoutMs: String(connection.timeoutMs) });
           setEditing(previous => !previous);
         }, { 'aria-expanded': editing, 'aria-controls': 'jumpserver-configuration' })),
-      authorization && connection.status === 'authorizing' && h('p', null, t('authHint'), ' ', h('a', { href: authorization.authorizeUrl, target: '_blank', rel: 'noopener noreferrer' }, t('open'))),
+      authorization && connection.status === 'authorizing' && h('p', null,
+        t(authorization.browserOpened === false ? 'authOpenFailed' : 'authHint'), ' ', h('a', { href: authorization.authorizeUrl, target: '_blank', rel: 'noopener noreferrer' }, t('open'))),
       connection.expiresAt && h('small', null, `${t('expires')}: ${new Date(connection.expiresAt).toLocaleString()}${connection.lastRefreshAt ? ` · ${t('refreshed')}: ${new Date(connection.lastRefreshAt).toLocaleString()}` : ''}`)),
     loaded && (!connection || editing) && configuration,
     loaded && h(ToolsCatalog, { tools: connection?.tools || [], t }),

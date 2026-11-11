@@ -6,6 +6,7 @@ playwright-report/
 *.tgz
 .env
 .DS_Store
+/lib/build-info.json
 
 # Local integration verification; excluded from the public repository.
 /scripts/live-helpers.mjs

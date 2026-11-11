@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "JumpServer",
-    "description": "Connect DeepSeek Harness to JumpServer with browser authorization and MCP tools."
+    "description": "Connect JumpServer to DeepSeek Harness so your agent can use permitted assets, run commands, transfer files, and hand the terminal over to you."
   }
 }

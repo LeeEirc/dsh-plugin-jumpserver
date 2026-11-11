@@ -1,7 +1,11 @@
 {
   "name": "dsh-plugin-jumpserver",
-  "version": "0.2.0",
-  "description": "JumpServer OAuth and MCP adapter for DeepSeek Harness desktop and web",
+  "version": "0.1.1",
+  "description": "Connect JumpServer assets to DeepSeek Harness: browser authorization, commands, file transfers, and terminal handoff.",
+  "homepage": "https://github.com/LeeEirc/dsh-plugin-jumpserver",
+  "repository": { "type": "git", "url": "git+https://github.com/LeeEirc/dsh-plugin-jumpserver.git" },
+  "bugs": { "url": "https://github.com/LeeEirc/dsh-plugin-jumpserver/issues" },
+  "keywords": ["deepseek-harness", "dsh", "jumpserver", "mcp", "ssh"],
   "type": "module",
   "main": "lib/index.js",
   "bin": { "jumpserver-mcp": "lib/cli.js" },
@@ -16,10 +20,11 @@
   "engines": { "node": ">=24.9.0", "dsh": ">=0.2.2-rc.1 <0.3.0" },
   "scripts": {
     "build": "node scripts/build-client.mjs",
+    "pack": "node scripts/pack.mjs",
     "prepack": "npm run build",
     "test": "node --test test/*.test.js"
   },
-  "dependencies": { "@modelcontextprotocol/sdk": "^1.32.2", "zod": "^4.4.3" },
+  "dependencies": { "@modelcontextprotocol/sdk": "^1.32.2", "semver": "^7.8.6", "zod": "^4.4.3" },
   "peerDependencies": {
     "@deepseek-ai/cordis": "~4.1.0",
     "@deepseek-ai/dsh-typert-protocol": ">=0.2.2-rc.1 <0.3.0"

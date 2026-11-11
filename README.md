@@ -1,6 +1,8 @@
 # JumpServer for DeepSeek Harness
 
-为 DeepSeek Harness 桌面版及本机 `dsh web` 提供 JumpServer 连接配置、浏览器 OAuth 授权、Token 自动刷新、MCP 工具发现及调用。
+在 DeepSeek Harness 中连接 JumpServer，通过浏览器授权，让 Agent 使用你有权限的资产，执行命令、传输文件，并在需要时由你接管终端。
+
+[使用说明](docs/usage.md) · [GitHub](https://github.com/LeeEirc/dsh-plugin-jumpserver) · [反馈问题](https://github.com/LeeEirc/dsh-plugin-jumpserver/issues)
 
 适配 JumpServer / KoKo 的 `pr@dev@agent-mcp` 服务端契约。参考 [dsh-mcp-manager](https://github.com/hyqhyq3/dsh-mcp-manager) 的插件结构和 OAuth 集成方式，MCP 传输使用官方 TypeScript SDK。
 
@@ -12,17 +14,22 @@
 
 ```bash
 npm install
-npm run build
-npm pack
+npm run pack
 ```
 
-在 DSH 桌面版的插件安装入口选择本地包 `dsh-plugin-jumpserver-0.2.0.tgz`，或将其完整路径作为安装源。Web 版可使用：
+在 DSH 桌面版的插件安装入口选择本地包 `dsh-plugin-jumpserver-0.1.1.tgz`，或将其完整路径作为安装源。Web 版可使用：
 
 ```bash
-dsh plugin --profile web add /完整路径/dsh-plugin-jumpserver-0.2.0.tgz
+dsh plugin --profile web add /完整路径/dsh-plugin-jumpserver-0.1.1.tgz
 ```
 
 安装后重启对应 DSH profile，点击左侧导航中的 **JumpServer** 打开独立页面。包中的 `cordis.patch.yml` 自动启用插件。
+
+### 更新插件
+
+页面顶部显示当前插件版本。点击“检查更新”读取本仓库 GitHub Release 的最新正式版本，发现更高版本后点击“更新到”对应版本。插件下载发布包并核对同一 Release 的 `SHA256SUMS`，再交给当前 profile 的 DSH 原生插件管理器安装；不会从 npm 下载同名插件。需要重启时按页面提示重启当前 DSH，更新后沿用原连接配置、`client_id` 和 OAuth Token。
+
+更新不会自动发布或安装预发布版本，也不会降级。没有启用 DSH 原生插件管理的 profile 应从原插件安装入口更新。校验后的安装包保存在状态文件旁的 `jumpserver-updates` 目录，供 profile 的本地包依赖继续使用，不应在该 profile 仍引用它时删除。开发代码须发布新版本后才能被其他客户端检查到；同一版本重建不会被视为新版本。
 
 ## 一句话接入
 
@@ -36,7 +43,7 @@ jumpserver-mcp setup --url 'https://jumpserver.example.com/koko/mcp'
 
 若命令不在 PATH 中，使用 `node` 运行已安装插件的 `lib/cli.js`，参数相同；不要通过 npm/npx 下载同名包。插件分发仍使用官方 GitHub Release 的 `.tgz` 和 `SHA256SUMS`。旧安装包若不含 `lib/cli.js`，须先更新插件。
 
-命令复用宿主的 `$DSH_HOME/jumpserver.json`（未设置时为 `~/.dsh/jumpserver.json`），保持单连接、固定名称及原 `client_id`。插件有自定义 `statePath` 时，必须用 `--state-path` 指向同一文件。已有授权可直接使用或按现有逻辑刷新；需要登录时输出浏览器授权链接，等待现有 PKCE 回调，不打印 Token。目标地址冲突、连接已停用、DCR 关闭且没有可复用客户端、额度不足等错误均停止，不覆盖配置或循环注册。
+命令复用宿主的 `$DSH_HOME/jumpserver.json`（未设置时为 `~/.dsh/jumpserver.json`），保持单连接、固定名称及原 `client_id`。插件有自定义 `statePath` 时，必须用 `--state-path` 指向同一文件。已有授权可直接使用或按现有逻辑刷新；需要登录时输出授权链接并尝试打开本机系统浏览器，等待现有 PKCE 回调，不打印 Token。SSH、无桌面环境或传入 `--no-browser` 时保留手动打开链接。目标地址冲突、连接已停用、DCR 关闭且没有可复用客户端、额度不足等错误均停止，不覆盖配置或循环注册。
 
 命令仅验证 MCP 连接与工具发现，不连接资产或执行工具。完成后重新加载对应 DSH profile，或在 JumpServer 页面点击“重新连接”，使宿主加载已保存的连接；当前对话不一定能立即获得新工具。远程机器的回环回调仍需本地端口转发，用户在自己浏览器完成登录、授权和 MFA；不能改用远程域名回调规避限制。配置指南只在接入时读取，不加入每轮对话，也不新增 MCP 工具。
 
@@ -44,7 +51,7 @@ jumpserver-mcp setup --url 'https://jumpserver.example.com/koko/mcp'
 
 1. 配置 JumpServer：地址如 `https://jumpserver.example.com/koko/mcp`，填写后点击“保存配置”。只填写站点 origin 时自动补上 `/koko/mcp`；完整 MCP 地址末尾不能带 `/`。
 2. 点击“浏览器授权”，在 JumpServer 登录并确认授权。部分部署还会要求确认跳转到本机回调。
-3. 授权完成后自动连接并发现工具，JumpServer 页面显示状态、工具数量、Token 有效期和诊断日志。工具目录默认收起，展开后可按需查看各工具的说明及完整调用名。浏览器未自动打开时点击“打开授权页面”。
+3. 桌面版自动打开系统浏览器；Web 版在点击授权时先创建新页面，再跳转到授权地址。授权完成后自动连接并发现工具，JumpServer 页面显示状态、工具数量、Token 有效期和诊断日志。工具目录默认收起，展开后可按需查看各工具的说明及完整调用名。系统浏览器未启动或 Web 弹窗被拦截时，点击“打开授权页面”继续同一次授权。
 4. 在 DSH 会话中使用工具，名称为 `mcp__jumpserver__<原始工具名>`，例如 `mcp__jumpserver__search_assets`。
 5. 已配置的连接默认收起配置表单，点击“连接设置”可修改地址、超时、撤销授权或清除配置。修改地址会清除本地 OAuth 凭据，需要重新授权。停用保留凭据并卸载工具；“撤销授权”调用服务端撤销端点并删除本地 Token，保留客户端注册信息；“清除配置”删除本地连接及其凭据。
 
@@ -100,6 +107,8 @@ npm run build
 
 修改独立页面源码 `src/client.js` 后执行 `npm run build`，生成 DSH 加载的 `lib/client.js`。单元测试使用本机隔离的 OAuth/MCP 服务，不需要外部环境或真实凭据。
 
+发布安装包使用 `npm run pack`，输出到 `dist/`。包内 README 使用独立的使用说明，仓库 README 保留开发文档。构建时将 Git 提交号写入安装包，由宿主返回实际加载的提交号；存在未提交修改时标记为开发版。
+
 ## 自动构建与 Release
 
 GitHub Actions 的 **Build and Release** 工作流在推送 `master` 或提交 Pull Request 时执行单元测试、构建和打包，安装包与 `SHA256SUMS` 保留在该次运行的 Artifacts 中。
@@ -114,9 +123,9 @@ git push origin master --follow-tags
 也可以在 GitHub **Actions → Build and Release → Run workflow** 手动发布：
 
 - `tag` 留空：使用所选分支的 `package.json` 版本创建 Release 和标签。
-- `tag` 填写已有标签（例如 `v0.2.0`）：检出该标签，重新测试、构建并更新对应 Release 的安装包和校验文件。
+- `tag` 填写已有标签（例如 `v0.1.0`）：检出该标签，重新测试、构建并更新对应 Release 的安装包和校验文件。
 - 已有运行可以使用 **Re-run all jobs** 重跑。只重跑发布 job 时复用尚未过期的构建产物。
 
-标签必须与 `package.json` 的版本一致。同一标签重跑会覆盖同名附件，并保留既有 Release 说明；不会移动已有标签。所选分支包含新代码时，应提升版本，或明确选择原标签重建。包含预发布版本号的标签（如 `v0.2.0-beta.1`）自动标记为 Pre-release。
+标签必须与 `package.json` 的版本一致。同一标签重跑会覆盖同名附件，并保留既有 Release 说明；不会移动已有标签。所选分支包含新代码时，应提升版本，或明确选择原标签重建。包含预发布版本号的标签（如 `v0.1.1-beta.1`）自动标记为 Pre-release。
 
 工作流只使用 GitHub 自动提供的 `GITHUB_TOKEN`，无需配置额外发布密钥。安装包通过 GitHub Release 分发，不会上传 npm registry。
