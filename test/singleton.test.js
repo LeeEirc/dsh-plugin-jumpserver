@@ -10,6 +10,7 @@ import { JumpServerManager } from '../lib/manager.js';
 import { provider } from './fixtures/provider.js';
 import { Readable } from 'node:stream';
 import { PLUGIN_VERSION } from '../lib/identity.js';
+import { claimSingleton } from '../lib/singleton.js';
 
 async function directory(t) {
   const path = await mkdtemp(join(tmpdir(), 'dsh-jumpserver-singleton-'));
@@ -84,6 +85,20 @@ test('duplicate plugin loading is rejected and unloading releases ownership', as
   await independent;
   await first.dispose();
   await roots[0].plugin(plugin, { statePath: join(path, 'replacement.json') });
+});
+
+test('client ownership follows the Cordis root across nested plugins', async t => {
+  const root = new Context();
+  t.after(() => root.fiber.dispose());
+  const first = root.plugin(ctx => { claimSingleton(ctx, 'client'); });
+  await first;
+  await root.plugin(async ctx => {
+    const duplicate = ctx.plugin(child => { claimSingleton(child, 'client'); });
+    await assert.rejects(Promise.resolve(duplicate), { code: 'already_loaded' });
+    await duplicate.dispose();
+  });
+  await first.dispose();
+  await root.plugin(ctx => { claimSingleton(ctx, 'client'); });
 });
 
 test('unsupported multi-connection state is rejected without rewriting it', async t => {

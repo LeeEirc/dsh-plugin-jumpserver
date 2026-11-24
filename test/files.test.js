@@ -191,6 +191,26 @@ test('workspace uploads are snapshotted; foreign files and mismatched metadata a
   assert.ok(attachments.saved > 0);
 });
 
+test('workspace uploads follow the current directory without falling back to the original project', async t => {
+  const { remote, workspace, directory, upload, agent } = await setup(t);
+  const next = join(directory, 'next-workspace');
+  await mkdir(next);
+  await writeFile(join(workspace, 'report.bin'), 'original project');
+  await writeFile(join(next, 'report.bin'), 'current project');
+  let cwd = workspace;
+  const get = agent.ctx.get;
+  agent.ctx.get = key => key === 'workingDirectory' ? { get: () => cwd } : get(key);
+  await upload('report.bin');
+  cwd = next;
+  await upload('report.bin');
+  assert.equal(remote.state.fileBytes.toString(), 'current project');
+  const before = remote.state.calls;
+  await assert.rejects(upload(join(workspace, 'report.bin')), { code: 'file_outside_session' });
+  cwd = undefined;
+  await assert.rejects(upload(join(workspace, 'report.bin')), { code: 'local_file_required' });
+  assert.equal(remote.state.calls, before);
+});
+
 test('invalid descriptors and corrupt downloads cannot publish a native file', async t => {
   const { remote, attachments, download } = await setup(t);
   remote.state.badTransfer = true;

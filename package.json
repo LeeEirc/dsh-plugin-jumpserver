@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-jumpserver",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Connect JumpServer assets to DeepSeek Harness: browser authorization, commands, file transfers, and terminal handoff.",
   "homepage": "https://github.com/LeeEirc/dsh-plugin-jumpserver",
   "repository": { "type": "git", "url": "git+https://github.com/LeeEirc/dsh-plugin-jumpserver.git" },
@@ -17,7 +17,7 @@
   },
   "files": ["lib", "locale", "cordis.patch.yml", "README.md", "LICENSE", "THIRD_PARTY_NOTICES"],
   "license": "MIT",
-  "engines": { "node": ">=24.9.0", "dsh": ">=0.2.2-rc.1 <0.3.0" },
+  "engines": { "node": ">=24.9.0", "dsh": ">=0.2.2-rc.1 <0.3.0 || ^0.2.3-alpha.2" },
   "scripts": {
     "build": "node scripts/build-client.mjs",
     "pack": "node scripts/pack.mjs",
@@ -26,8 +26,8 @@
   },
   "dependencies": { "@modelcontextprotocol/sdk": "^1.32.2", "semver": "^7.8.6", "zod": "^4.4.3" },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "~4.1.0",
-    "@deepseek-ai/dsh-typert-protocol": ">=0.2.2-rc.1 <0.3.0"
+    "@deepseek-ai/cordis": "~4.1.0 || ~4.2.0-alpha.1",
+    "@deepseek-ai/dsh-typert-protocol": ">=0.2.2-rc.1 <0.3.0 || ^0.2.3-alpha.2"
   },
   "devDependencies": {
     "esbuild": "^0.28.0"

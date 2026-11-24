@@ -8,7 +8,7 @@
 
 ## 安装
 
-要求 Node.js `>=24.9`，DSH `>=0.2.2-rc.1 <0.3.0`。
+要求 Node.js `>=24.9`，支持 DSH `0.2.2-rc.5` 及 `0.2.3-alpha.2`，并保留 `0.2.2-rc.1` 起的兼容范围。使用 DSH `0.2.3-alpha.2` 时，Node.js 须符合宿主要求：`^24.22.3 || >=26.13.1`。
 
 在仓库目录执行：
 
@@ -17,11 +17,13 @@ npm install
 npm run pack
 ```
 
-在 DSH 桌面版的插件安装入口选择本地包 `dsh-plugin-jumpserver-0.1.1.tgz`，或将其完整路径作为安装源。Web 版可使用：
+在 DSH 桌面版的插件安装入口选择本地包 `dsh-plugin-jumpserver-0.1.2.tgz`，或将其完整路径作为安装源。Web 版可使用：
 
 ```bash
-dsh plugin --profile web add /完整路径/dsh-plugin-jumpserver-0.1.1.tgz
+dsh plugin --profile web add /完整路径/dsh-plugin-jumpserver-0.1.2.tgz
 ```
+
+也可在 DSH 的插件安装入口填写 [正式 Release 安装包](https://github.com/LeeEirc/dsh-plugin-jumpserver/releases/latest) 的 `.tgz` 下载地址。不要使用 `github.com:LeeEirc/dsh-plugin-jumpserver.git`，该格式不是合法的依赖协议；若 profile 已保存此错误依赖，先在插件管理中纠正安装源。
 
 安装后重启对应 DSH profile，点击左侧导航中的 **JumpServer** 打开独立页面。包中的 `cordis.patch.yml` 自动启用插件。
 
