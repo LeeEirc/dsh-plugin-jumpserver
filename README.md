@@ -17,10 +17,10 @@ npm install
 npm run pack
 ```
 
-在 DSH 桌面版的插件安装入口选择本地包 `dsh-plugin-jumpserver-0.1.3.tgz`，或将其完整路径作为安装源。Web 版可使用：
+在 DSH 桌面版的插件安装入口选择本地包 `dsh-plugin-jumpserver-0.1.4.tgz`，或将其完整路径作为安装源。Web 版可使用：
 
 ```bash
-dsh plugin --profile web add /完整路径/dsh-plugin-jumpserver-0.1.3.tgz
+dsh plugin --profile web add /完整路径/dsh-plugin-jumpserver-0.1.4.tgz
 ```
 
 也可在 DSH 的插件安装入口填写 [正式 Release 安装包](https://github.com/LeeEirc/dsh-plugin-jumpserver/releases/latest) 的 `.tgz` 下载地址。不要使用 `github.com:LeeEirc/dsh-plugin-jumpserver.git`，该格式不是合法的依赖协议；若 profile 已保存此错误依赖，先在插件管理中纠正安装源。
