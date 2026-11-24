@@ -1,6 +1,6 @@
 import React from 'react';
 import { remoteContract } from '../lib/remote-contract.js';
-import { DISPLAY_NAME, GITHUB_URL, PLUGIN_ID, PLUGIN_VERSION, TOOL_PREFIX } from '../lib/identity.js';
+import { DISPLAY_NAME, GITHUB_URL, PLUGIN_ID, PLUGIN_PACKAGE, PLUGIN_VERSION, TOOL_PREFIX } from '../lib/identity.js';
 import { claimSingleton } from '../lib/singleton.js';
 import { authorizeInBrowser } from '../lib/client-authorization.js';
 
@@ -21,7 +21,7 @@ const zh = {
   authOpenFailed: '未能自动打开浏览器，请点击下方授权链接继续。',
   version: '插件版本', checkUpdate: '检查更新', checkingUpdate: '检查中…', installUpdate: '更新', installingUpdate: '更新中…',
   development: '开发版',
-  upToDate: '暂无更新', updateUnavailable: '请在 DSH 插件管理中更新。',
+  upToDate: '暂无更新', updateUnavailable: '请在 DSH 插件管理中更新。', managePlugin: '插件管理',
   updated: '已更新', reload: '重新加载', restartRequired: '重启 DSH 后生效。',
 };
 const en = {
@@ -39,7 +39,7 @@ const en = {
   authOpenFailed: 'The browser could not open automatically. Use the authorization link below to continue.',
   version: 'Plugin version', checkUpdate: 'Check for updates', checkingUpdate: 'Checking…', installUpdate: 'Update', installingUpdate: 'Updating…',
   development: 'Development',
-  upToDate: 'No updates available', updateUnavailable: 'Update through DSH plugin management.',
+  upToDate: 'No updates available', updateUnavailable: 'Update through DSH plugin management.', managePlugin: 'Manage plugin',
   updated: 'Updated', reload: 'Reload', restartRequired: 'Restart DSH to apply.',
 };
 
@@ -104,45 +104,99 @@ function ToolsCatalog({ tools, t }) {
         h('div', { className: 'jsm-tool-body' }, h('code', null, `${TOOL_PREFIX}${tool.name}`), h('p', null, tool.description))))) : h('p', { className: 'jsm-catalog-empty' }, t('noTools'))));
 }
 
-function PluginHeader({ request, t, installBlocked, onInstallingChange }) {
+function openPluginManager(ctx, event) {
+  try {
+    const navigation = ctx.get('pluginNavigation');
+    if (typeof navigation?.openBundle !== 'function') return;
+    navigation.openBundle(PLUGIN_PACKAGE);
+    event.preventDefault();
+  } catch { /* The Release link remains available when native navigation cannot open. */ }
+}
+
+function PluginHeader({ request, t, installBlocked, onInstallingChange, onManagePlugin }) {
   const [pluginUpdate, setPluginUpdate] = React.useState({ currentVersion: PLUGIN_VERSION });
   const [operation, setOperation] = React.useState('check-update');
   const [message, setMessage] = React.useState(null);
+  const watch = React.useRef(null);
+  const needsVersionReload = current => {
+    if (!current.installedVersion || current.needsRestart || current.installedVersion === current.currentVersion) return false;
+    const version = value => /^(\d+)\.(\d+)\.(\d+)/.exec(value)?.slice(1).map(Number);
+    const installed = version(current.installedVersion), running = version(current.currentVersion);
+    if (!installed || !running) return true;
+    const difference = installed.findIndex((value, index) => value !== running[index]);
+    return difference < 0 ? !current.installedVersion.includes('-') && current.currentVersion.includes('-')
+      : installed[difference] > running[difference];
+  };
   React.useEffect(() => {
-    let active = true;
-    (async () => {
+    let active = true, pending = false, polling = false, terminalError = null, revision = 0, timer;
+    const schedule = () => { clearTimeout(timer); timer = setTimeout(() => poll(), 1000); };
+    const receive = (current, installing = false) => {
+      if (!active || terminalError || (installing && !pending)) return false;
+      if (installing && !current.installing) revision++;
+      pending = !!current.installing;
+      setPluginUpdate(current);
+      setOperation(pending ? 'install-update' : null);
+      onInstallingChange(pending);
+      setMessage(current.updateError ? { error: true, text: [current.updateError.message, current.updateError.recoveryPath,
+        current.needsRestart && t('restartRequired')].filter(Boolean).join(' · ') } : null);
+      clearTimeout(timer);
+      if (pending) schedule();
+      return true;
+    };
+    const error = (e, installing = false) => {
+      if (!active || terminalError || (installing && !pending)) return;
+      if (installing && e.fromHost && e.code) {
+        terminalError = e; pending = false; clearTimeout(timer); onInstallingChange(false);
+        setPluginUpdate(current => ({ ...current, installing: false, updateError: { code: e.code, message: e.message } }));
+      }
+      setMessage({ text: e.message, error: true });
+      if (pending) schedule();
+      else setOperation(null);
+    };
+    const poll = async (check = false) => {
+      if (!active || terminalError) return;
+      if (polling) { if (pending) schedule(); return; }
+      polling = true;
+      const observed = revision;
       try {
         const current = await request({ action: 'update-status' });
-        if (!active) return;
-        setPluginUpdate(current);
-        if (current.needsRestart || current.installedVersion) return;
-        const result = await request({ action: 'check-update' });
-        if (active) setPluginUpdate(result);
-      } catch (e) { if (active) setMessage({ text: e.message, error: true }); }
-      finally { if (active) setOperation(null); }
-    })();
-    return () => { active = false; };
-  }, [request]);
-  const needsReload = pluginUpdate.installedVersion && pluginUpdate.installedVersion !== pluginUpdate.currentVersion && !pluginUpdate.needsRestart;
+        if (observed !== revision || !receive(current)) return;
+        if (check && !pending && !current.needsRestart && !needsVersionReload(current) && !current.updateError) {
+          setOperation('check-update');
+          receive(await request({ action: 'check-update' }));
+        }
+      } catch (e) { if (observed === revision) error(e); }
+      finally { polling = false; }
+    };
+    watch.current = { receive, error, reset() { terminalError = null; revision++; }, start() {
+      if (!active) return;
+      terminalError = null; revision++; pending = true; setOperation('install-update'); onInstallingChange(true); schedule();
+    } };
+    void poll(true);
+    return () => { active = false; clearTimeout(timer); watch.current = null; };
+  }, [request, t, onInstallingChange]);
+  const needsReload = needsVersionReload(pluginUpdate);
   const changeVersion = async () => {
     if (needsReload) { window.location.reload(); return; }
+    const observer = watch.current;
+    if (!observer) return;
     const action = pluginUpdate.available ? 'install-update' : 'check-update';
     setOperation(action); setMessage(null);
-    if (action === 'install-update') onInstallingChange(true);
+    if (action === 'install-update') observer.start();
+    else observer.reset();
     try {
       const result = await request({ action, ...(action === 'install-update' ? { version: pluginUpdate.latestVersion } : {}) });
-      setPluginUpdate(result);
-      if (action === 'check-update' && !result.available) setMessage({ text: t('upToDate') });
-    } catch (e) { setMessage({ text: e.message, error: true }); }
-    finally { setOperation(null); if (action === 'install-update') onInstallingChange(false); }
+      if (action === 'install-update') observer.receive(result, true);
+      else if (observer.receive(result) && !result.available) setMessage({ text: t('upToDate') });
+    } catch (e) { observer.error(e, action === 'install-update'); }
   };
   const label = t(operation === 'check-update' ? 'checkingUpdate' : operation === 'install-update' ? 'installingUpdate'
-    : pluginUpdate.needsRestart ? 'updated' : needsReload ? 'reload' : pluginUpdate.available ? 'installUpdate' : 'checkUpdate');
+    : pluginUpdate.needsRestart ? pluginUpdate.installedVersion ? 'updated' : 'restartRequired' : needsReload ? 'reload' : pluginUpdate.available ? 'installUpdate' : 'checkUpdate');
   const hint = pluginUpdate.needsRestart ? t('restartRequired') : needsReload ? t('reload')
     : pluginUpdate.available ? pluginUpdate.canInstall ? `${t('installUpdate')} v${pluginUpdate.latestVersion}` : t('updateUnavailable') : t('checkUpdate');
   const notice = message?.text || (pluginUpdate.installedVersion
     ? `${t('updated')} v${pluginUpdate.installedVersion}${pluginUpdate.needsRestart ? ` · ${t('restartRequired')}` : ''}`
-    : pluginUpdate.available && !pluginUpdate.canInstall ? t('updateUnavailable') : '');
+    : pluginUpdate.needsRestart ? t('restartRequired') : pluginUpdate.available && !pluginUpdate.canInstall ? t('updateUnavailable') : '');
   return h('header', { className: 'jsm-title' },
     h('div', { className: 'jsm-head' },
       h('div', { className: 'jsm-heading' }, h('h1', null, DISPLAY_NAME),
@@ -151,6 +205,8 @@ function PluginHeader({ request, t, installBlocked, onInstallingChange }) {
             target: '_blank', rel: 'noopener noreferrer' }, pluginUpdate.commit.slice(0, 7))))),
       h('div', { className: 'jsm-header-actions' },
         h('a', { href: GITHUB_URL, title: GITHUB_URL, target: '_blank', rel: 'noopener noreferrer' }, 'GitHub ↗'),
+        (pluginUpdate.updateError || (pluginUpdate.available && !pluginUpdate.canInstall)) && h('a', { href: `${GITHUB_URL}/releases/latest`,
+          target: '_blank', rel: 'noopener noreferrer', onClick: onManagePlugin }, t('managePlugin')),
         h('button', { type: 'button', className: pluginUpdate.available && !operation ? 'jsm-primary' : undefined,
           disabled: !!operation || pluginUpdate.needsRestart || (pluginUpdate.available && (!pluginUpdate.canInstall || installBlocked)) || (needsReload && installBlocked),
           title: hint, 'aria-label': pluginUpdate.available && !operation ? hint : label, onClick: changeVersion }, label))),
@@ -158,7 +214,7 @@ function PluginHeader({ request, t, installBlocked, onInstallingChange }) {
     notice && h('p', { className: 'jsm-update-message', role: message?.error ? 'alert' : 'status', 'data-error': !!message?.error }, notice));
 }
 
-function JumpServerPage({ request, t }) {
+function JumpServerPage({ request, t, onManagePlugin }) {
   const [connection, setConnection] = React.useState(null);
   const [loaded, setLoaded] = React.useState(false);
   const [error, setError] = React.useState('');
@@ -222,7 +278,7 @@ function JumpServerPage({ request, t }) {
       }); }, { className: 'jsm-danger' })),
   );
   return h('div', { className: 'jsm-page', 'data-jumpserver-page': true }, h('main', { className: 'jsm', 'aria-label': DISPLAY_NAME },
-    h(PluginHeader, { request, t, installBlocked: busy || connection?.status === 'authorizing', onInstallingChange: setInstallingPlugin }),
+    h(PluginHeader, { request, t, installBlocked: busy || connection?.status === 'authorizing', onInstallingChange: setInstallingPlugin, onManagePlugin }),
     error && h('div', { className: 'jsm-error', role: 'alert' }, error),
     !loaded && h('p', { role: 'status' }, t('loading')),
     connection && h('section', { className: 'jsm-card', 'data-connection': PLUGIN_ID, 'aria-labelledby': 'jumpserver-connection-title' },
@@ -256,15 +312,16 @@ function registerPage(ctx) {
     const remote = await ctx.remote.jumpserver.request(input);
     if (!remote.ok) throw new Error(remote.error.message || remote.error.code);
     const result = remote.value;
-    if (!result.ok) throw new Error(result.error.message);
+    if (!result.ok) throw Object.assign(new Error(result.error.message), { code: result.error.code, fromHost: true });
     return result.value;
   };
   const t = ctx.locale.bind('jumpserver');
+  const onManagePlugin = event => openPluginManager(ctx, event);
   if (!document.querySelector('style[data-jumpserver]')) {
     const style = document.createElement('style'); style.dataset.jumpserver = 'true'; style.textContent = css; document.head.appendChild(style);
     ctx.effect(() => () => style.remove());
   }
-  ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: PLUGIN_ID, locale: 'jumpserver' }, () => h(JumpServerPage, { request, t })));
+  ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: PLUGIN_ID, locale: 'jumpserver' }, () => h(JumpServerPage, { request, t, onManagePlugin })));
   ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({ name: 'sidebar.panellist', id: PLUGIN_ID, order: 51, label: () => t('title'), locale: 'jumpserver' }, PanelIcon));
 }
 

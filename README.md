@@ -4,7 +4,7 @@
 
 [使用说明](docs/usage.md) · [GitHub](https://github.com/LeeEirc/dsh-plugin-jumpserver) · [反馈问题](https://github.com/LeeEirc/dsh-plugin-jumpserver/issues)
 
-适配 JumpServer / KoKo 的 `pr@dev@agent-mcp` 服务端契约。参考 [dsh-mcp-manager](https://github.com/hyqhyq3/dsh-mcp-manager) 的插件结构和 OAuth 集成方式，MCP 传输使用官方 TypeScript SDK。
+通过 JumpServer / KoKo 提供的 MCP 接口连接资产。参考 [dsh-mcp-manager](https://github.com/hyqhyq3/dsh-mcp-manager) 的插件结构和 OAuth 集成方式，MCP 传输使用官方 TypeScript SDK。
 
 ## 安装
 
@@ -17,10 +17,10 @@ npm install
 npm run pack
 ```
 
-在 DSH 桌面版的插件安装入口选择本地包 `dsh-plugin-jumpserver-0.1.2.tgz`，或将其完整路径作为安装源。Web 版可使用：
+在 DSH 桌面版的插件安装入口选择本地包 `dsh-plugin-jumpserver-0.1.3.tgz`，或将其完整路径作为安装源。Web 版可使用：
 
 ```bash
-dsh plugin --profile web add /完整路径/dsh-plugin-jumpserver-0.1.2.tgz
+dsh plugin --profile web add /完整路径/dsh-plugin-jumpserver-0.1.3.tgz
 ```
 
 也可在 DSH 的插件安装入口填写 [正式 Release 安装包](https://github.com/LeeEirc/dsh-plugin-jumpserver/releases/latest) 的 `.tgz` 下载地址。不要使用 `github.com:LeeEirc/dsh-plugin-jumpserver.git`，该格式不是合法的依赖协议；若 profile 已保存此错误依赖，先在插件管理中纠正安装源。
@@ -31,7 +31,9 @@ dsh plugin --profile web add /完整路径/dsh-plugin-jumpserver-0.1.2.tgz
 
 标题旁显示当前插件版本和短提交号。进入页面时检查本仓库 GitHub Release 的最新正式版本，发现更高版本后直接点击“更新”；没有更新时可手动再次检查。检查和更新的进度独立显示，检查不会阻塞授权或连接操作。插件下载发布包并核对同一 Release 的 `SHA256SUMS`，再交给当前 profile 的 DSH 原生插件管理器安装；不会从 npm 下载同名插件。安装后按提示重新加载页面或重启 DSH，更新后沿用原连接配置、`client_id` 和 OAuth Token。
 
-更新不会自动发布或安装预发布版本，也不会降级。没有启用 DSH 原生插件管理的 profile 应从原插件安装入口更新。校验后的安装包保存在状态文件旁的 `jumpserver-updates` 目录，供 profile 的本地包依赖继续使用，不应在该 profile 仍引用它时删除。开发代码须发布新版本后才能被其他客户端检查到；同一版本重建不会被视为新版本。
+启用 HMR 的 profile 会先保存当前插件的本地恢复快照，再交给 DSH 停止旧插件并安装新版。更新任务会跨插件重载保留，新页面可接续显示结果。安装失败会恢复旧版；恢复失败时显示可用于原生安装的 `file:` 恢复源，并写入 DSH 日志及 `jumpserver-updates/last-update-error.json`，便于插件无法加载时恢复。“插件管理”入口优先打开 DSH 中的 JumpServer 插件详情，不支持该导航时打开正式 Release 页面。此过程保留连接配置及 OAuth 凭据。
+
+更新不会自动发布或安装预发布版本，也不会降级。没有启用 DSH 原生插件管理的 profile 应从原插件安装入口更新。校验后的安装包及恢复快照保存在状态文件旁的 `jumpserver-updates` 目录，供 profile 的本地包依赖继续使用，不应在该 profile 仍引用它们时删除。开发代码须发布新版本后才能被其他客户端检查到；同一版本重建不会被视为新版本。
 
 ## 一句话接入
 
